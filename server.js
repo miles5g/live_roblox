@@ -7,7 +7,7 @@ app.use(express.json());
 // --- Configuration ---
 const TIKTOK_USERNAME = 'milkywizard'; // Your TikTok handle (no @)
 const PORT = 3000;
-const MAX_ON_SCREEN = 20;
+const MAX_ON_SCREEN = 12;  // Safe for Studio 60 FPS. Raise to 20 when streaming Roblox client.
 
 // --- State Memory ---
 let regularQueue = [];   // Usernames waiting their turn
@@ -99,35 +99,44 @@ tiktokConnection.on('error', (err) => {
 // --- REST Endpoints for Roblox ---
 
 // GET /api/queue/next — Roblox asks "who do I spawn next?"
-// Also serves as the heartbeat — every poll resets the timer
+// Also serves as the heartbeat — every poll resets the timer.
+//
+// Responses:
+//   { status: 'spawn', username, type }        — floor has room, spawn normally
+//   { status: 'bump',  evict, username, type } — floor full, evict oldest first
+//   { status: 'empty' }                        — nothing queued right now
 app.get('/api/queue/next', (req, res) => {
     lastHeartbeat = Date.now();
-    if (activeOnScreen.length >= MAX_ON_SCREEN) {
-        return res.json({ status: 'full' });
-    }
 
-    // VIPs always go first — skip any who somehow got on screen already
+    // Find next eligible person (VIP first, then regular)
+    let nextUser = null;
+    let nextType = null;
+
     while (vipQueue.length > 0) {
-        const next = vipQueue.shift();
-        if (!isAlreadyOnScreen(next)) {
-            activeOnScreen.push(next);
-            console.log(`[Spawn] VIP: ${next} (on screen: ${activeOnScreen.length})`);
-            return res.json({ status: 'spawn', username: next, type: 'VIP' });
+        const candidate = vipQueue.shift();
+        if (!isAlreadyOnScreen(candidate)) { nextUser = candidate; nextType = 'VIP'; break; }
+    }
+    if (!nextUser) {
+        while (regularQueue.length > 0) {
+            const candidate = regularQueue.shift();
+            if (!isAlreadyOnScreen(candidate)) { nextUser = candidate; nextType = 'Regular'; break; }
         }
     }
 
-    // Regular queue — skip anyone currently on screen, spawn next eligible
-    while (regularQueue.length > 0) {
-        const next = regularQueue.shift();
-        if (!isAlreadyOnScreen(next)) {
-            activeOnScreen.push(next);
-            console.log(`[Spawn] Regular: ${next} (on screen: ${activeOnScreen.length})`);
-            return res.json({ status: 'spawn', username: next, type: 'Regular' });
-        }
-        // They're already on screen — discard this duplicate entry silently
+    if (!nextUser) return res.json({ status: 'empty' });
+
+    // Floor has room — spawn normally
+    if (activeOnScreen.length < MAX_ON_SCREEN) {
+        activeOnScreen.push(nextUser);
+        console.log(`[Spawn] ${nextType}: ${nextUser} (${activeOnScreen.length}/${MAX_ON_SCREEN})`);
+        return res.json({ status: 'spawn', username: nextUser, type: nextType });
     }
 
-    return res.json({ status: 'empty' });
+    // Floor is full — bump oldest to make room for next person
+    const evict = activeOnScreen.shift();
+    activeOnScreen.push(nextUser);
+    console.log(`[Bump] Evicting ${evict} → Spawning ${nextUser} [${nextType}] (${activeOnScreen.length}/${MAX_ON_SCREEN})`);
+    return res.json({ status: 'bump', evict, username: nextUser, type: nextType });
 });
 
 // POST /api/queue/done — Roblox signals a character finished their 60s dance

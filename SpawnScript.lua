@@ -15,7 +15,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 -- ── Config ────────────────────────────────────────────────
 local SERVER_URL      = "http://localhost:3000"
 local POLL_INTERVAL   = 2    -- seconds between queue checks
-local DANCE_DURATION  = 60   -- seconds each character stays
+local DANCE_DURATION  = 600  -- safety failsafe max (10 min) — floor bumps before this
 local MAX_ON_SCREEN   = 20
 local GRID_COLS       = 5    -- characters per row on the floor
 local GRID_SPACING    = 5    -- studs between characters
@@ -208,9 +208,39 @@ while true do
         warn("[Poll] Cannot reach Node.js server. Is `node server.js` running?")
     else
         local parseOk, data = pcall(HttpService.JSONDecode, HttpService, raw)
-        if parseOk and data and data.status == "spawn" and data.username then
-            print("[Poll] Spawning " .. data.username .. " [" .. (data.type or "Regular") .. "]")
-            task.spawn(spawnCharacter, data.username)
+        if parseOk and data then
+            if data.status == "spawn" and data.username then
+                print("[Poll] Spawning " .. data.username .. " [" .. (data.type or "Regular") .. "]")
+                task.spawn(spawnCharacter, data.username)
+
+            elseif data.status == "bump" and data.evict and data.username then
+                -- Evict the oldest character to make room, then spawn the new one
+                print("[Bump] Evicting " .. data.evict .. " → Spawning " .. data.username)
+                local evictModel = workspace:FindFirstChild(data.evict)
+                if evictModel then
+                    local hum = evictModel:FindFirstChildOfClass("Humanoid")
+                    if hum then pcall(function() hum:UnequipTools() end) end
+                    -- Release that character's slot
+                    for _, slot in ipairs(spawnSlots) do
+                        if slot.occupied then
+                            -- Match by position proximity
+                            local root = evictModel:FindFirstChild("HumanoidRootPart")
+                            if root then
+                                local dist = (root.Position - slot.position).Magnitude
+                                if dist < GRID_SPACING then
+                                    slot.occupied = false
+                                    break
+                                end
+                            end
+                        end
+                    end
+                    pcall(function()
+                        evictModel.Parent = nil
+                        evictModel:Destroy()
+                    end)
+                end
+                task.spawn(spawnCharacter, data.username)
+            end
         end
     end
 end
