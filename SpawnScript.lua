@@ -24,13 +24,11 @@ local GRID_SPACING    = 5    -- studs between characters
 -- We add this so characters land ON the floor rather than through it.
 local CHAR_ROOT_HEIGHT = 3
 
--- Roblox built-in dance animation IDs (loopable emotes)
+-- Free Roblox dance animation IDs (work in Studio + published games)
 local DANCE_ANIMS = {
-    "507771019",  -- Robot
-    "507776043",  -- Dance 2
-    "507770453",  -- Breakdance
-    "507771955",  -- Shufflin'
-    "507776543",  -- Gangnam Style
+    "182435998",  -- Dance (classic R15, always available)
+    "182491028",  -- Dance 2
+    "182491065",  -- Dance 3
 }
 
 -- ── Setup ─────────────────────────────────────────────────
