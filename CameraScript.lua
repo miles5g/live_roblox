@@ -1,16 +1,8 @@
 -- ============================================================
 -- CameraScript  |  StarterPlayerScripts > LocalScript
 -- Portrait-optimized cinematic camera for TikTok 9:16.
---
--- Behavior:
---   1. New character spawns → camera immediately tweens to them
---   2. After CYCLE_INTERVAL seconds → moves to next character
---   3. Cycles from newest → progressively older → oldest
---   4. After oldest is featured → wraps back to newest on floor
---   5. When characters despawn, they're removed from the cycle
--- ============================================================
--- WHERE TO PUT THIS:
---   Roblox Studio → StarterPlayer → StarterPlayerScripts → LocalScript
+-- Cycles through spawned characters (oldest → newest → loop).
+-- Interval scales with player count: 5s (full) to 20s (1 player).
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -20,59 +12,41 @@ local RunService        = game:GetService("RunService")
 local camera = workspace.CurrentCamera
 camera.CameraType = Enum.CameraType.Scriptable
 
--- Re-enforce every frame — Roblox's default PlayerModule can override this on load
-RunService.RenderStepped:Connect(function()
-    if camera.CameraType ~= Enum.CameraType.Scriptable then
-        camera.CameraType = Enum.CameraType.Scriptable
-    end
-end)
-
 -- ── Config ────────────────────────────────────────────────
 
--- Close body shot — fills the frame with the character (head to knees)
-local CAM_DISTANCE     = 10    -- studs behind target
-local CAM_HEIGHT       = 1     -- lowered: camera at waist level, looks slightly up (hero angle)
-local CAM_SIDE         = 2     -- slight 3/4 angle
-local FOCUS_HEIGHT     = 4     -- aim at chest/neck
+local CAM_DISTANCE   = 10    -- studs behind target (body shot distance)
+local CAM_HEIGHT     = 1     -- studs above root (waist level → hero angle)
+local CAM_SIDE       = 2     -- slight 3/4 offset
+local FOCUS_HEIGHT   = 4     -- aim at chest/neck
+local TWEEN_DURATION = 2.2   -- seconds per camera swing
+local FOLLOW_ALPHA   = 0.04  -- drift smoothness (the natural shake feel)
+local MIN_INTERVAL   = 5     -- min seconds per character (full floor)
+local MAX_INTERVAL   = 20    -- max seconds per character (1 player alone)
 
-local TWEEN_DURATION   = 2.2   -- seconds per camera swing
-local FOLLOW_ALPHA     = 0.04  -- drift smoothness while locked
-local MIN_INTERVAL     = 5     -- minimum seconds per character (full floor)
-local MAX_INTERVAL     = 20    -- maximum seconds per character (1 player)
+-- ── State (declared before any function that references them) ──
 
--- Dynamic interval: fewer players = more screen time each
--- Formula: clamp(20 / playerCount, 5, 20)
--- Examples: 1 player = 20s | 2 = 10s | 4 = 5s | 12 = 5s
+local activeParts   = {}     -- [1]=oldest ... [n]=newest
+local cycleIndex    = 1
+local currentTarget = nil
+local isTweening    = false
+local lastCycleTime = 0
+
+-- ── Helpers ───────────────────────────────────────────────
+
+-- Dynamic interval: fewer players → longer feature time
 local function getCycleInterval()
     local count = math.max(1, #activeParts)
     return math.clamp(MAX_INTERVAL / count, MIN_INTERVAL, MAX_INTERVAL)
 end
 
--- ── State ─────────────────────────────────────────────────
-
--- Ordered list: [1] = oldest on floor, [#] = newest
--- cycleIndex counts DOWN from newest to oldest, then wraps
-local activeParts  = {}
-local cycleIndex   = 1
-local currentTarget = nil
-local isTweening   = false
-local lastCycleTime = 0
-
--- ── Helpers ───────────────────────────────────────────────
-
+-- Level CFrame via explicit axis math — no roll from side offset
 local function getTargetCFrame(rootPart)
     local pos    = rootPart.Position
     local focus  = pos + Vector3.new(0, FOCUS_HEIGHT, 0)
     local camPos = pos + Vector3.new(CAM_SIDE, CAM_HEIGHT, CAM_DISTANCE)
-
-    -- Build a perfectly level CFrame using explicit axes.
-    -- CFrame.lookAt can introduce roll when the camera is offset to the side.
-    -- This matrix method guarantees the horizon is always flat.
-    local forward  = (focus - camPos).Unit
-    local worldUp  = Vector3.new(0, 1, 0)
-    local right    = forward:Cross(worldUp).Unit
-    local up       = right:Cross(forward).Unit
-
+    local forward = (focus - camPos).Unit
+    local right   = forward:Cross(Vector3.new(0, 1, 0)).Unit
+    local up      = right:Cross(forward).Unit
     return CFrame.fromMatrix(camPos, right, up, -forward)
 end
 
@@ -80,127 +54,114 @@ local function tweenTo(rootPart)
     if not rootPart or not rootPart.Parent then return end
     currentTarget = rootPart
     isTweening    = true
-
-    local goal = getTargetCFrame(rootPart)
-    local info  = TweenInfo.new(
-        TWEEN_DURATION,
-        Enum.EasingStyle.Sine,
-        Enum.EasingDirection.InOut
+    local tween = TweenService:Create(
+        camera,
+        TweenInfo.new(TWEEN_DURATION, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+        { CFrame = getTargetCFrame(rootPart) }
     )
-    local tween = TweenService:Create(camera, info, { CFrame = goal })
     tween.Completed:Connect(function() isTweening = false end)
     tween:Play()
 end
 
--- Remove a PrimaryPart from the active list and adjust cycleIndex
 local function removePart(target)
     for i, p in ipairs(activeParts) do
         if p == target then
             table.remove(activeParts, i)
-            -- Keep cycleIndex in bounds
-            if #activeParts == 0 then
-                cycleIndex = 1
-            else
-                cycleIndex = math.clamp(cycleIndex, 1, #activeParts)
-            end
+            cycleIndex = math.clamp(cycleIndex, 1, math.max(1, #activeParts))
             break
         end
     end
 end
+
+-- ── Enforce Scriptable camera type ────────────────────────
+-- Roblox's default PlayerModule can override this on startup
+
+RunService.RenderStepped:Connect(function()
+    if camera.CameraType ~= Enum.CameraType.Scriptable then
+        camera.CameraType = Enum.CameraType.Scriptable
+    end
+end)
 
 -- ── Event: new character spawned ──────────────────────────
 
 local focusEvent = ReplicatedStorage:WaitForChild("FocusOnCharacter", 30)
 
 focusEvent.OnClientEvent:Connect(function(model)
-    print("[Camera] FocusOnCharacter received for model: " .. tostring(model))
-    if not model or not model.Parent then
-        warn("[Camera] model is nil or has no parent — skipping")
-        return
-    end
+    if not model or not model.Parent then return end
 
-    -- Wait briefly for the HumanoidRootPart to exist after replication
     local rootPart = model:WaitForChild("HumanoidRootPart", 5)
-    if not rootPart then
-        warn("[Camera] HumanoidRootPart not found on: " .. model.Name)
-        return
-    end
+    if not rootPart then return end
 
     -- Avoid duplicates
     for _, p in ipairs(activeParts) do
         if p == rootPart then return end
     end
 
-    -- Insert at end = newest
     table.insert(activeParts, rootPart)
-    cycleIndex = #activeParts  -- feature this new character first
+    cycleIndex = #activeParts  -- feature this new arrival first
 
-    -- Auto-remove when character despawns
+    -- Clean up when character despawns
     rootPart.AncestryChanged:Connect(function()
         if not rootPart.Parent then
             removePart(rootPart)
             if currentTarget == rootPart and #activeParts > 0 then
-                local safeIndex = math.clamp(cycleIndex, 1, #activeParts)
-                tweenTo(activeParts[safeIndex])
+                tweenTo(activeParts[math.clamp(cycleIndex, 1, #activeParts)])
                 lastCycleTime = tick()
             end
         end
     end)
 
-    -- Swing to new character and reset cycle timer
     tweenTo(rootPart)
     lastCycleTime = tick()
-
-    print("[Camera] Tweening to: " .. model.Name
-        .. " | Active on floor: " .. #activeParts
-        .. " | CameraType: " .. tostring(camera.CameraType))
+    print("[Camera] Now featuring: " .. model.Name .. " (" .. #activeParts .. " on floor)")
 end)
 
--- ── Cycle loop ────────────────────────────────────────────
--- Runs every frame; advances to next character when timer expires.
+-- ── Cycle loop (task.spawn — not Heartbeat) ───────────────
+-- Using task.wait(1) so errors don't spam 60x per second
 
-RunService.Heartbeat:Connect(function()
-    -- Prune any destroyed parts
-    for i = #activeParts, 1, -1 do
-        if not activeParts[i] or not activeParts[i].Parent then
-            table.remove(activeParts, i)
+task.spawn(function()
+    while true do
+        task.wait(1)
+
+        -- Prune destroyed parts
+        for i = #activeParts, 1, -1 do
+            if not activeParts[i] or not activeParts[i].Parent then
+                table.remove(activeParts, i)
+            end
         end
-    end
 
-    if #activeParts == 0 then return end
+        if #activeParts == 0 then continue end
 
-    -- Clamp cycleIndex
-    cycleIndex = math.clamp(cycleIndex, 1, #activeParts)
+        cycleIndex = math.clamp(cycleIndex, 1, #activeParts)
 
-    -- Time to move to next character?
-    if not isTweening and (tick() - lastCycleTime) >= getCycleInterval() then
-        -- Count UP: 1 → 2 → 3 → ... → #activeParts → 1 → 2 → ...
-        cycleIndex = (cycleIndex % #activeParts) + 1
-
-        local target = activeParts[cycleIndex]
-        if target and target.Parent then
-            tweenTo(target)
-            lastCycleTime = tick()
-            print("[Camera] Cycling to: " .. (target.Parent and target.Parent.Name or "?")
-                .. " [" .. cycleIndex .. "/" .. #activeParts .. "]")
+        if not isTweening and (tick() - lastCycleTime) >= getCycleInterval() then
+            cycleIndex = (cycleIndex % #activeParts) + 1
+            local target = activeParts[cycleIndex]
+            if target and target.Parent then
+                tweenTo(target)
+                lastCycleTime = tick()
+                print("[Camera] Cycle → " .. (target.Parent and target.Parent.Name or "?")
+                    .. " [" .. cycleIndex .. "/" .. #activeParts .. "] "
+                    .. math.floor(getCycleInterval()) .. "s interval")
+            end
         end
     end
 end)
 
--- ── Drift follow while locked on target ───────────────────
+-- ── Drift follow (RenderStepped — keeps the natural shake) ──
 
 RunService.RenderStepped:Connect(function()
     if isTweening then return end
     if not currentTarget or not currentTarget.Parent then return end
-    local desired = getTargetCFrame(currentTarget)
-    camera.CFrame  = camera.CFrame:Lerp(desired, FOLLOW_ALPHA)
+    camera.CFrame = camera.CFrame:Lerp(getTargetCFrame(currentTarget), FOLLOW_ALPHA)
 end)
 
 -- ── Default idle position (empty floor) ───────────────────
 
--- Idle wide shot when floor is empty (wider than body shot so whole stage is visible)
-local STAGE_CENTER  = Vector3.new(0, 5, 7.5)
-local idleCamPos    = STAGE_CENTER + Vector3.new(4, 14, 28)
-camera.CFrame       = CFrame.lookAt(idleCamPos, STAGE_CENTER)
+local STAGE_CENTER = Vector3.new(0, 5, 7.5)
+camera.CFrame = CFrame.lookAt(
+    STAGE_CENTER + Vector3.new(4, 14, 28),
+    STAGE_CENTER
+)
 
-print("[Camera] Ready — " .. MIN_INTERVAL .. "s-" .. MAX_INTERVAL .. "s dynamic cycle | Portrait 9:16")
+print("[Camera] Ready — " .. MIN_INTERVAL .. "s-" .. MAX_INTERVAL .. "s dynamic cycle")
