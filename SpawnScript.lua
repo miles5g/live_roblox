@@ -124,22 +124,26 @@ end
 -- ── Spawn ─────────────────────────────────────────────────
 
 local function spawnCharacter(username)
+    -- Small yield so the API isn't hammered back-to-back
+    task.wait(0.5)
+
     -- 1. Validate username exists on Roblox
     local ok1, userId = pcall(function()
-        return Players:GetUserIdFromUsernameAsync(username)
+        return Players:GetUserIdFromNameAsync(username)
     end)
     if not ok1 or not userId then
-        warn("[Spawn] Unknown username: " .. username)
+        warn("[Spawn] GetUserIdFromNameAsync failed for '" .. username .. "': " .. tostring(userId))
         notifyDone(username)
         return
     end
+    print("[Spawn] Got userId " .. tostring(userId) .. " for " .. username)
 
     -- 2. Fetch their avatar description
     local ok2, desc = pcall(function()
         return Players:GetHumanoidDescriptionFromUserId(userId)
     end)
     if not ok2 or not desc then
-        warn("[Spawn] Could not load avatar for: " .. username)
+        warn("[Spawn] GetHumanoidDescriptionFromUserId failed for '" .. username .. "': " .. tostring(desc))
         notifyDone(username)
         return
     end
@@ -149,7 +153,7 @@ local function spawnCharacter(username)
         return Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
     end)
     if not ok3 or not model then
-        warn("[Spawn] Could not create model for: " .. username)
+        warn("[Spawn] CreateHumanoidModelFromDescription failed for '" .. username .. "': " .. tostring(model))
         notifyDone(username)
         return
     end
@@ -170,7 +174,8 @@ local function spawnCharacter(username)
         model.PrimaryPart = model:FindFirstChild("HumanoidRootPart")
     end
     model.Parent = workspace
-    model:SetPrimaryPartCFrame(CFrame.new(slot.position))
+    -- Rotate 180° so characters face the camera (positive Z direction)
+    model:SetPrimaryPartCFrame(CFrame.new(slot.position) * CFrame.Angles(0, math.pi, 0))
 
     -- 5. Dance!
     playDance(model)

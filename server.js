@@ -22,14 +22,12 @@ const isValidRobloxUsername = (username) => {
     return regex.test(username);
 };
 
-// Block duplicates anywhere in the pipeline
-const isUserInSystem = (username) => {
+// Only block if the user is currently visible on the dance floor.
+// Queue duplicates are allowed — same person can queue multiple times
+// and will get another turn once their current spawn finishes.
+const isAlreadyOnScreen = (username) => {
     const lower = username.toLowerCase();
-    return (
-        regularQueue.some(u => u.toLowerCase() === lower) ||
-        vipQueue.some(u => u.toLowerCase() === lower) ||
-        activeOnScreen.some(u => u.toLowerCase() === lower)
-    );
+    return activeOnScreen.some(u => u.toLowerCase() === lower);
 };
 
 // --- TikTok Connection ---
@@ -54,7 +52,7 @@ function connectToTikTok() {
 tiktokConnection.on('chat', (data) => {
     const text = data.comment.trim();
 
-    if (isValidRobloxUsername(text) && !isUserInSystem(text)) {
+    if (isValidRobloxUsername(text) && !isAlreadyOnScreen(text)) {
         regularQueue.push(text);
         console.log(`[Queue] +${text} (queue: ${regularQueue.length})`);
     }
@@ -95,19 +93,25 @@ app.get('/api/queue/next', (req, res) => {
         return res.json({ status: 'full' });
     }
 
-    // VIPs always go first
-    if (vipQueue.length > 0) {
+    // VIPs always go first — skip any who somehow got on screen already
+    while (vipQueue.length > 0) {
         const next = vipQueue.shift();
-        activeOnScreen.push(next);
-        console.log(`[Spawn] VIP: ${next} (on screen: ${activeOnScreen.length})`);
-        return res.json({ status: 'spawn', username: next, type: 'VIP' });
+        if (!isAlreadyOnScreen(next)) {
+            activeOnScreen.push(next);
+            console.log(`[Spawn] VIP: ${next} (on screen: ${activeOnScreen.length})`);
+            return res.json({ status: 'spawn', username: next, type: 'VIP' });
+        }
     }
 
-    if (regularQueue.length > 0) {
+    // Regular queue — skip anyone currently on screen, spawn next eligible
+    while (regularQueue.length > 0) {
         const next = regularQueue.shift();
-        activeOnScreen.push(next);
-        console.log(`[Spawn] Regular: ${next} (on screen: ${activeOnScreen.length})`);
-        return res.json({ status: 'spawn', username: next, type: 'Regular' });
+        if (!isAlreadyOnScreen(next)) {
+            activeOnScreen.push(next);
+            console.log(`[Spawn] Regular: ${next} (on screen: ${activeOnScreen.length})`);
+            return res.json({ status: 'spawn', username: next, type: 'Regular' });
+        }
+        // They're already on screen — discard this duplicate entry silently
     }
 
     return res.json({ status: 'empty' });
@@ -133,8 +137,8 @@ app.post('/api/test/inject', (req, res) => {
         return res.status(400).json({ error: 'Invalid Roblox username format' });
     }
 
-    if (isUserInSystem(username)) {
-        return res.json({ status: 'already_in_system', username });
+    if (isAlreadyOnScreen(username)) {
+        return res.json({ status: 'already_on_screen', username });
     }
 
     regularQueue.push(username);
