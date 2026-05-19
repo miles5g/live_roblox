@@ -1,7 +1,7 @@
 -- ============================================================
 -- CameraScript  |  StarterPlayerScripts > LocalScript
--- Smoothly swings the camera to focus on the newest spawned
--- character. The rest of the crowd stays visible behind them.
+-- Portrait-optimized (9:16) cinematic camera for TikTok Live.
+-- Swings to newest spawn; crowd visible below in frame.
 -- ============================================================
 -- WHERE TO PUT THIS:
 --   Roblox Studio → Explorer → StarterPlayer → StarterPlayerScripts
@@ -15,39 +15,46 @@ local RunService        = game:GetService("RunService")
 local camera = workspace.CurrentCamera
 camera.CameraType = Enum.CameraType.Scriptable
 
--- ── Camera Config ─────────────────────────────────────────
+-- ── Portrait Framing Config (optimized for TikTok 9:16) ───
+--
+-- TikTok is viewed almost entirely on mobile in portrait.
+-- The key difference vs. landscape:
+--   - LESS side offset (portrait is narrow — side room is wasted)
+--   - MORE height (we have vertical space, use it to show the crowd below)
+--   - Camera pulls back further so the grid fills the lower frame
+--   - Focus point aims slightly above chest so head isn't cropped
+--
+local CAM_DISTANCE  = 28   -- studs behind target (pulls back = more crowd visible)
+local CAM_HEIGHT    = 14   -- studs above floor (tall portrait = show crowd below)
+local CAM_SIDE      = 2    -- minimal side offset (portrait frame is narrow)
+local FOCUS_HEIGHT  = 3    -- studs above target root to aim at (keeps head in frame)
 
--- Distance behind + above the focused character.
--- Pulling back far enough means the crowd is visible in the bg.
-local CAM_DISTANCE  = 22   -- studs behind the character
-local CAM_HEIGHT    = 9    -- studs above the floor
-local CAM_SIDE      = 6    -- studs to the right (slight 3/4 angle)
-
--- How fast the camera snaps to a new character (seconds)
+-- How fast the camera swings to a new character (seconds)
 local TWEEN_DURATION = 2.2
 
--- How smoothly it drifts while following (0 = instant, 1 = no follow)
--- 0.04 = very smooth cinematic drift
+-- Gentle follow drift after tween lands (0 = instant, higher = slower)
 local FOLLOW_ALPHA  = 0.04
 
 -- ── State ─────────────────────────────────────────────────
 
-local currentTarget = nil   -- The PrimaryPart of the newest character
+local currentTarget = nil
 local isTweening    = false
 
--- ── Helpers ───────────────────────────────────────────────
-
--- Given a character's root part, return the ideal camera CFrame.
--- Camera sits behind, above, and slightly to the side so the
--- grid of dancers fills the background of the shot.
+-- ── Camera Position Calculator ────────────────────────────
+--
+-- Camera sits high and far back so:
+--   - Newest character: upper-center of frame (hero position)
+--   - Crowd grid: visible in lower portion of the tall portrait frame
+--   - Slight side offset: gives a natural 3/4 angle, not a dead-on shot
+--
 local function getTargetCFrame(rootPart)
     local pos   = rootPart.Position
-    local focus = pos + Vector3.new(0, 1.5, 0)   -- aim at chest height
+    local focus = pos + Vector3.new(0, FOCUS_HEIGHT, 0)
 
     local camPos = pos + Vector3.new(
         CAM_SIDE,
         CAM_HEIGHT,
-        CAM_DISTANCE   -- positive Z = behind the character
+        CAM_DISTANCE
     )
 
     return CFrame.lookAt(camPos, focus)
@@ -63,8 +70,7 @@ focusEvent.OnClientEvent:Connect(function(rootPart)
     currentTarget = rootPart
     isTweening    = true
 
-    -- Smooth tween swing to the new character
-    local goal     = getTargetCFrame(rootPart)
+    local goal = getTargetCFrame(rootPart)
     local tweenInf = TweenInfo.new(
         TWEEN_DURATION,
         Enum.EasingStyle.Sine,
@@ -79,15 +85,20 @@ focusEvent.OnClientEvent:Connect(function(rootPart)
     tween:Play()
 end)
 
--- ── RenderStepped: gentle follow drift ────────────────────
--- After the tween finishes, the camera softly drifts to stay
--- locked on the target even if they slide or bob slightly.
+-- ── RenderStepped: smooth follow drift ────────────────────
+-- After the tween settles, the camera gently tracks the target
+-- so it stays locked even if the character bobs or slides.
 
 RunService.RenderStepped:Connect(function()
-    -- Don't fight the tween while it's running
     if isTweening then return end
     if not currentTarget or not currentTarget.Parent then return end
 
     local desired = getTargetCFrame(currentTarget)
     camera.CFrame  = camera.CFrame:Lerp(desired, FOLLOW_ALPHA)
 end)
+
+-- ── Roblox Studio Setup Reminder (printed on Play) ────────
+-- In Studio: set the game window to approximately 9:16 ratio
+-- (e.g. 405 × 720 px) before streaming so what you see in
+-- Studio matches what TikTok viewers see on mobile.
+print("[Camera] Portrait mode active — optimized for TikTok 9:16")
