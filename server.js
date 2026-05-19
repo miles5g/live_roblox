@@ -13,6 +13,17 @@ const MAX_ON_SCREEN = 20;
 let regularQueue = [];   // Usernames waiting their turn
 let vipQueue = [];       // Gift senders — always go to the front
 let activeOnScreen = []; // Usernames currently spawned in Roblox
+let lastHeartbeat = Date.now(); // Tracks when Roblox last checked in
+
+// If Roblox Studio stops or crashes, clear activeOnScreen after 15 seconds
+// so the floor doesn't stay permanently "full"
+setInterval(() => {
+    const secondsSinceHeartbeat = (Date.now() - lastHeartbeat) / 1000;
+    if (secondsSinceHeartbeat > 15 && activeOnScreen.length > 0) {
+        console.warn(`[Heartbeat] No contact from Roblox for ${Math.round(secondsSinceHeartbeat)}s — clearing active list.`);
+        activeOnScreen = [];
+    }
+}, 5000);
 
 // --- Helpers ---
 
@@ -88,7 +99,9 @@ tiktokConnection.on('error', (err) => {
 // --- REST Endpoints for Roblox ---
 
 // GET /api/queue/next — Roblox asks "who do I spawn next?"
+// Also serves as the heartbeat — every poll resets the timer
 app.get('/api/queue/next', (req, res) => {
+    lastHeartbeat = Date.now();
     if (activeOnScreen.length >= MAX_ON_SCREEN) {
         return res.json({ status: 'full' });
     }
