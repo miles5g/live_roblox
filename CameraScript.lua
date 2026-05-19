@@ -15,9 +15,9 @@ camera.CameraType = Enum.CameraType.Scriptable
 -- ── Config ────────────────────────────────────────────────
 
 local CAM_DISTANCE   = 10    -- studs behind target (body shot distance)
-local CAM_HEIGHT     = 1     -- studs above root (waist level → hero angle)
-local CAM_SIDE       = 2     -- slight 3/4 offset
-local FOCUS_HEIGHT   = 4     -- aim at chest/neck
+local CAM_HEIGHT     = 2     -- studs above root (chest level)
+local CAM_SIDE       = 0     -- dead center, head-on shot
+local FOCUS_HEIGHT   = 2     -- match CAM_HEIGHT so camera looks straight ahead, not up
 local TWEEN_DURATION = 2.2   -- seconds per camera swing
 local FOLLOW_ALPHA   = 0.04  -- drift smoothness (the natural shake feel)
 local MIN_INTERVAL   = 5     -- min seconds per character (full floor)
