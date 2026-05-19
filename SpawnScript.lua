@@ -20,6 +20,10 @@ local MAX_ON_SCREEN   = 20
 local GRID_COLS       = 5    -- characters per row on the floor
 local GRID_SPACING    = 5    -- studs between characters
 
+-- R15 HumanoidRootPart sits ~3 studs above the character's feet.
+-- We add this so characters land ON the floor rather than through it.
+local CHAR_ROOT_HEIGHT = 3
+
 -- Roblox built-in dance animation IDs (loopable emotes)
 local DANCE_ANIMS = {
     "507771019",  -- Robot
@@ -47,7 +51,7 @@ local function buildSpawnSlots()
         local row = math.floor(i / GRID_COLS)
         local offset = Vector3.new(
             (col - math.floor(GRID_COLS / 2)) * GRID_SPACING,
-            spawnAnchor.Size.Y / 2,
+            spawnAnchor.Size.Y / 2 + CHAR_ROOT_HEIGHT,
             row * GRID_SPACING
         )
         slots[i + 1] = {
@@ -159,7 +163,12 @@ local function spawnCharacter(username)
         return
     end
 
-    model.Name   = username
+    model.Name = username
+    -- Ensure PrimaryPart is set (CreateHumanoidModelFromDescription should do this,
+    -- but we guard against edge cases)
+    if not model.PrimaryPart then
+        model.PrimaryPart = model:FindFirstChild("HumanoidRootPart")
+    end
     model.Parent = workspace
     model:SetPrimaryPartCFrame(CFrame.new(slot.position))
 
