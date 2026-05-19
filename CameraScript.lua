@@ -165,11 +165,8 @@ RunService.Heartbeat:Connect(function()
 
     -- Time to move to next character?
     if not isTweening and (tick() - lastCycleTime) >= getCycleInterval() then
-        -- Count DOWN: newest → progressively older → oldest → wrap to newest
-        cycleIndex = cycleIndex - 1
-        if cycleIndex < 1 then
-            cycleIndex = #activeParts  -- wrap back to newest
-        end
+        -- Count UP: 1 → 2 → 3 → ... → #activeParts → 1 → 2 → ...
+        cycleIndex = (cycleIndex % #activeParts) + 1
 
         local target = activeParts[cycleIndex]
         if target and target.Parent then
