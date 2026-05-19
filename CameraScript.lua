@@ -20,6 +20,13 @@ local RunService        = game:GetService("RunService")
 local camera = workspace.CurrentCamera
 camera.CameraType = Enum.CameraType.Scriptable
 
+-- Re-enforce every frame — Roblox's default PlayerModule can override this on load
+RunService.RenderStepped:Connect(function()
+    if camera.CameraType ~= Enum.CameraType.Scriptable then
+        camera.CameraType = Enum.CameraType.Scriptable
+    end
+end)
+
 -- ── Config ────────────────────────────────────────────────
 
 local CAM_DISTANCE     = 28    -- studs behind target
@@ -86,7 +93,11 @@ end
 local focusEvent = ReplicatedStorage:WaitForChild("FocusOnCharacter", 30)
 
 focusEvent.OnClientEvent:Connect(function(rootPart)
-    if not rootPart or not rootPart.Parent then return end
+    print("[Camera] FocusOnCharacter event received! rootPart = " .. tostring(rootPart))
+    if not rootPart or not rootPart.Parent then
+        warn("[Camera] rootPart is nil or has no parent — skipping tween")
+        return
+    end
 
     -- Avoid duplicates
     for _, p in ipairs(activeParts) do
@@ -114,8 +125,9 @@ focusEvent.OnClientEvent:Connect(function(rootPart)
     tweenTo(rootPart)
     lastCycleTime = tick()
 
-    print("[Camera] New character: " .. (rootPart.Parent and rootPart.Parent.Name or "?")
-        .. " | Active on floor: " .. #activeParts)
+    print("[Camera] Tweening to: " .. (rootPart.Parent and rootPart.Parent.Name or "?")
+        .. " | Active on floor: " .. #activeParts
+        .. " | CameraType: " .. tostring(camera.CameraType))
 end)
 
 -- ── Cycle loop ────────────────────────────────────────────
