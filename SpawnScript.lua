@@ -24,65 +24,22 @@ local GRID_SPACING    = 5    -- studs between characters
 -- We add this so characters land ON the floor rather than through it.
 local CHAR_ROOT_HEIGHT = 3
 
--- Dance animation IDs — loaded CLIENT-SIDE to avoid serverplaceid=0 restriction.
--- SAFE IDs: official Roblox emotes (507xxxxxx) + 10-11 digit catalog animations.
--- NEVER add 14-15 digit UGC IDs — they require explicit experience permissions.
+-- Dance animation IDs — loaded CLIENT-SIDE.
+-- Studio Play mode has a serverplaceid=0 restriction that blocks most external assets.
+-- ONLY IDs pre-cached in Roblox Studio's local bundle load reliably here.
+-- Verified working in Studio (tested ✅):
 local DANCE_ANIMS = {
-    -- Official Roblox free emotes (507xxxxxx — always safe)
-    "507771019",  -- Robot
-    "507776043",  -- Dance 2
-    "507770453",  -- Breakdance
-    "507771955",  -- Shufflin
-    "507776361",  -- Tentacle
-    "507772104",  -- Tread the Boards
-    "507766666",  -- Violent
-    "507768875",  -- Laugh
-    "507769720",  -- Cheer
-    "507777826",  -- Salute
-    "507778087",  -- Applaud
-    -- Roblox catalog animations (10-11 digits — no permissions needed)
-    "9183705326",   -- Fantastic Baby
-    "9183680092",   -- Attitude
-    "12541310778",  -- Bumblebee
-    "12631822422",  -- Bad Guy
-    "12793979197",  -- Banana Shake
-    "14034144806",  -- Say So
-    "14034365156",  -- Accolades
-    "14393703428",  -- Savage Love
-    "14669274636",  -- Unlock It
-    "14840711021",  -- Pretty Girl
-    "14845112417",  -- Woman
-    "14881386891",  -- About Damn Time
-    "14898782216",  -- Barbie Girl
-    "14901879394",  -- Paint The Town Red
-    "14907819792",  -- Beauty and a Beat
-    "14958219332",  -- Diamonds
-    "15044050905",  -- Just Do It
-    "15178352490",  -- Antifragile
-    "15207828712",  -- Spooky Scary Skeleton
-    "15254578171",  -- Baddie
-    "15315656682",  -- Strawberry Shortcake
-    "15438608616",  -- Banana Shake alt
-    "15635063518",  -- Diva
-    "15701067954",  -- Alive
-    "15710587486",  -- Best Friends
-    "15712992592",  -- Call Me Maybe
-    "15762634922",  -- Lean On
-    "15944891414",  -- Harder Better Faster Stronger
-    "16037779346",  -- Ahi Challenge
-    "16119285069",  -- Cool Things
-    "16492412120",  -- Nyan Cat
-    "16668250285",  -- Sad Cat
-    "16754281220",  -- Crab Rave
-    "16818032377",  -- Sunday Best
-    "16818230893",  -- Sweet Parade
-    "16830454742",  -- Poke Dance
-    "16895648239",  -- Classy
-    "16906415457",  -- Prince of Egypt
-    "16997154126",  -- Pajama Party
-    "17258972465",  -- Stay With Me
-    "17273623931",  -- Y2K
-    "17362739079",  -- Midas Touch
+    "507771019",  -- Robot        ✅
+    "507776043",  -- Dance 2      ✅
+    "507770453",  -- Breakdance   ✅
+    "507771955",  -- Shufflin     ✅
+    "507776361",  -- Tentacle     (may work — no permission block, just serverplaceid)
+    "507772104",  -- Tread        (may work — no permission block, just serverplaceid)
+    "507768875",  -- Laugh        (may work)
+    "507769720",  -- Cheer        (may work)
+    -- NOTE: To unlock 50+ dances, stream the published Roblox CLIENT window
+    -- instead of Studio. The Roblox client does not have the serverplaceid=0
+    -- restriction and all catalog animations will load freely.
 }
 
 -- ── Setup ─────────────────────────────────────────────────
