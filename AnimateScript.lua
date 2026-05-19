@@ -46,7 +46,7 @@ animateEvent.OnClientEvent:Connect(function(model, animId)
         end)
         if ok and track then
         track.Looped = true
-        track:Play(0.1, 1, 0.5)  -- 0.5 = half speed
+        track:Play(0.1, 1, 0.75)
             return true
         end
         return false
