@@ -24,15 +24,16 @@ local GRID_SPACING    = 5    -- studs between characters
 -- We add this so characters land ON the floor rather than through it.
 local CHAR_ROOT_HEIGHT = 3
 
--- Dance animation IDs — loaded CLIENT-SIDE to avoid serverplaceid=0 restriction
--- These are sent to the AnimateScript LocalScript via RemoteEvent
+-- Dance animation IDs — loaded CLIENT-SIDE to avoid serverplaceid=0 restriction.
+-- ONLY use official Roblox emote IDs (507xxxxxx range).
+-- UGC animations (large IDs like 113675197206291) require explicit game permissions — avoid them.
 local DANCE_ANIMS = {
-    "507771019",  -- Robot
-    "507776043",  -- Dance 2
-    "507770453",  -- Breakdance
-    "507771955",  -- Shufflin
-    "113675197206291",  -- Savage
-    "80822430061394",   -- Move Ya Body
+    "507771019",  -- Robot       ✅ verified
+    "507776043",  -- Dance 2     ✅ verified
+    "507770453",  -- Breakdance  ✅ verified
+    "507771955",  -- Shufflin    ✅ verified
+    "507776361",  -- Tentacle    ✅ official Roblox emote
+    "507772104",  -- Tread       ✅ official Roblox emote
 }
 
 -- ── Setup ─────────────────────────────────────────────────
