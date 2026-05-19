@@ -29,10 +29,12 @@ end)
 
 -- ── Config ────────────────────────────────────────────────
 
-local CAM_DISTANCE     = 28    -- studs behind target
-local CAM_HEIGHT       = 14    -- studs above floor
+-- Close body shot — fills the frame with the character (head to knees)
+local CAM_DISTANCE     = 10    -- studs behind target
+local CAM_HEIGHT       = 3     -- slightly above waist height
 local CAM_SIDE         = 2     -- slight 3/4 angle
-local FOCUS_HEIGHT     = 3     -- aim at chest height
+local FOCUS_HEIGHT     = 4     -- aim at chest/neck
+
 local TWEEN_DURATION   = 2.2   -- seconds per camera swing
 local FOLLOW_ALPHA     = 0.04  -- drift smoothness while locked
 local CYCLE_INTERVAL   = 5     -- seconds before moving to next character
@@ -181,8 +183,9 @@ end)
 
 -- ── Default idle position (empty floor) ───────────────────
 
-local STAGE_CENTER = Vector3.new(0, 5, 7.5)
-local idleCamPos   = STAGE_CENTER + Vector3.new(CAM_SIDE, CAM_HEIGHT, CAM_DISTANCE)
-camera.CFrame      = CFrame.lookAt(idleCamPos, STAGE_CENTER)
+-- Idle wide shot when floor is empty (wider than body shot so whole stage is visible)
+local STAGE_CENTER  = Vector3.new(0, 5, 7.5)
+local idleCamPos    = STAGE_CENTER + Vector3.new(4, 14, 28)
+camera.CFrame       = CFrame.lookAt(idleCamPos, STAGE_CENTER)
 
 print("[Camera] Ready — cycles every " .. CYCLE_INTERVAL .. "s | Portrait 9:16")
