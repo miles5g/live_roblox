@@ -24,19 +24,29 @@ local GRID_SPACING    = 5    -- studs between characters
 -- We add this so characters land ON the floor rather than through it.
 local CHAR_ROOT_HEIGHT = 3
 
--- Free Roblox dance animation IDs (work in Studio + published games)
+-- Dance animation IDs — loaded CLIENT-SIDE to avoid serverplaceid=0 restriction
+-- These are sent to the AnimateScript LocalScript via RemoteEvent
 local DANCE_ANIMS = {
-    "182435998",  -- Dance (classic R15, always available)
-    "182491028",  -- Dance 2
-    "182491065",  -- Dance 3
+    "507771019",  -- Robot
+    "507776043",  -- Dance 2
+    "507770453",  -- Breakdance
+    "507771955",  -- Shufflin
+    "113675197206291",  -- Savage
+    "80822430061394",   -- Move Ya Body
 }
 
 -- ── Setup ─────────────────────────────────────────────────
 
--- RemoteEvent tells the CameraScript which character to follow
+-- RemoteEvent: camera follows newest character
 local focusEvent = Instance.new("RemoteEvent")
-focusEvent.Name  = "FocusOnCharacter"
+focusEvent.Name   = "FocusOnCharacter"
 focusEvent.Parent = ReplicatedStorage
+
+-- RemoteEvent: client plays dance animation on spawned model
+-- MUST be client-side — server-side animation fails with serverplaceid=0 in Studio
+local animateEvent = Instance.new("RemoteEvent")
+animateEvent.Name   = "AnimateCharacter"
+animateEvent.Parent = ReplicatedStorage
 
 -- Reference point — name this Part "SpawnLocation" in your map
 local spawnAnchor = workspace:WaitForChild("SpawnLocation")
@@ -78,25 +88,10 @@ end
 
 -- ── Helpers ───────────────────────────────────────────────
 
-local function playDance(model)
-    local humanoid = model:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-    local animator = humanoid:FindFirstChildOfClass("Animator")
-    if not animator then
-        animator = Instance.new("Animator")
-        animator.Parent = humanoid
-    end
-
-    local anim = Instance.new("Animation")
-    anim.AnimationId = "rbxassetid://" .. DANCE_ANIMS[math.random(#DANCE_ANIMS)]
-
-    local ok, track = pcall(function()
-        return animator:LoadAnimation(anim)
-    end)
-    if ok and track then
-        track.Looped = true
-        track:Play()
-    end
+-- Animation is handled entirely by AnimateScript (LocalScript, client-side).
+-- We just pick a random ID here and send it over the wire.
+local function getRandomAnimId()
+    return DANCE_ANIMS[math.random(#DANCE_ANIMS)]
 end
 
 local function hardDestroy(model, slot)
@@ -175,8 +170,9 @@ local function spawnCharacter(username)
     -- Rotate 180° so characters face the camera (positive Z direction)
     model:SetPrimaryPartCFrame(CFrame.new(slot.position) * CFrame.Angles(0, math.pi, 0))
 
-    -- 5. Dance!
-    playDance(model)
+    -- 5. Tell clients to play a dance animation on this model (client-side loading)
+    local animId = getRandomAnimId()
+    animateEvent:FireAllClients(model, animId)
 
     -- 6. Tell the camera to swing to this character
     focusEvent:FireAllClients(model.PrimaryPart)
