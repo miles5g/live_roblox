@@ -45,11 +45,22 @@ Node.js server.js        ← frees the slot, next user spawns
 4. **HTTP Requests must be ON.** Game Settings → Security → Allow HTTP Requests. Without this, nothing works.
 5. **Camera must be locked.** No free-cam during stream. Position it once in Studio, then lock it before going live.
 
-### Stream / Anti-Ban
-1. **No copyrighted music.** Use StreamBeats, Lofi Girl stream-safe, or any DMCA-free playlist only.
-2. **Keep the overlay moving.** A scrolling "Type your Roblox username!" ticker or live clock must always be visible. This prevents TikTok from flagging the stream as frozen/static content.
-3. **PC sleep = never.** Power settings must be set to Never Sleep before walking away.
-4. **Remote access is your safety net.** Chrome Remote Desktop or AnyDesk on your phone lets you restart from anywhere.
+### Stream / Anti-Ban (TOP PRIORITY — Never Compromise These)
+TikTok's moderation AI looks for three things: static video, no audio reaction to chat, and no human presence. Every rule below defeats one of those signals.
+
+**Video signals (must always be moving):**
+1. **Camera swings to every new spawn.** Every time a character appears, the camera does a 2-second cinematic tween directly to them. This is constant, chat-driven motion — TikTok's AI reads it as a human reacting to the audience.
+2. **Keep the overlay moving.** A scrolling "Type your Roblox username to join the dance floor!" ticker in TikTok Live Studio must always be visible. A live digital clock in the corner is a strong secondary signal.
+3. **Never leave a static frame.** The grid of dancing characters + camera swings + scrolling overlay = three independent moving elements at all times.
+
+**Audio signals (stream must never be silent):**
+4. **No copyrighted music.** Use StreamBeats, Lofi Girl stream-safe, or any DMCA-free synthwave playlist only. Run through TikTok Live Studio's audio mixer, not through Roblox.
+5. **Future: add TTS announcements.** When a character spawns, Node.js should speak "Welcome to the dance floor, [username]!" out loud via the `say` npm package. This is the strongest anti-ban signal (active audio commentary).
+
+**Uptime / crash protection:**
+6. **PC sleep = never.** Windows Power Settings → Sleep → Never. Screen can turn off; GPU must keep rendering.
+7. **Remote access is your safety net.** Chrome Remote Desktop or AnyDesk on your phone. Check it every few hours if unattended.
+8. **Test before sleeping.** Run the stream for 1 hour unattended before leaving it overnight. Watch it from your phone remotely to confirm no crash.
 
 ---
 
@@ -65,13 +76,23 @@ Node.js server.js        ← frees the slot, next user spawns
 
 ## File Map
 
-| File | Purpose |
-|---|---|
-| `server.js` | The entire Node.js backend |
-| `package.json` | npm project config |
-| `node_modules/` | Installed libraries (never edit manually) |
-| `MISSION.md` | This file — rules and reference |
-| `README.md` | Public-facing project overview |
+| File | Where it goes | Purpose |
+|---|---|---|
+| `server.js` | Run in terminal | Node.js backend — TikTok listener + queue |
+| `SpawnScript.lua` | Roblox → ServerScriptService → Script | Spawns avatars, manages grid, cleans up |
+| `CameraScript.lua` | Roblox → StarterPlayerScripts → LocalScript | Cinematic camera follows newest spawn |
+| `package.json` | (project root) | npm config |
+| `node_modules/` | (project root) | Libraries — never edit |
+| `MISSION.md` | (project root) | This file — rules and reference |
+| `README.md` | (project root) | Public GitHub overview |
+
+## Camera Behavior Rules
+
+- On every new spawn, camera **tweens** (2.2 seconds, Sine ease) to a position behind + above + slightly right of the new character
+- After the tween, camera **softly drifts** (Lerp α=0.04) to stay locked on target
+- `CAM_DISTANCE = 22` studs pulls back far enough that the full crowd is visible in the background
+- `CAM_SIDE = 6` studs gives a cinematic 3/4 angle instead of a dead-on shot
+- Never set `camera.CameraType` to anything except `Scriptable` while the stream is running
 
 ---
 
