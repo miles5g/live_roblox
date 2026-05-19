@@ -37,20 +37,26 @@ animateEvent.OnClientEvent:Connect(function(model, animId)
         animator.Parent = humanoid
     end
 
-    -- Load and play the animation
-    local anim = Instance.new("Animation")
-    anim.AnimationId = "rbxassetid://" .. tostring(animId)
+    -- Try the assigned animation, fall back to Robot (507771019) if it fails
+    local function tryPlay(id)
+        local anim = Instance.new("Animation")
+        anim.AnimationId = "rbxassetid://" .. tostring(id)
+        local ok, track = pcall(function()
+            return animator:LoadAnimation(anim)
+        end)
+        if ok and track then
+            track.Looped = true
+            track:Play()
+            return true
+        end
+        return false
+    end
 
-    local ok, track = pcall(function()
-        return animator:LoadAnimation(anim)
-    end)
-
-    if ok and track then
-        track.Looped = true
-        track:Play()
-        print("[AnimateScript] Playing dance " .. animId .. " on " .. model.Name)
+    if not tryPlay(animId) then
+        warn("[AnimateScript] " .. animId .. " failed on " .. model.Name .. " — falling back to Robot")
+        tryPlay("507771019")  -- Robot is always available
     else
-        warn("[AnimateScript] Failed to load animation " .. animId .. " on " .. model.Name .. ": " .. tostring(track))
+        print("[AnimateScript] Dancing: " .. animId .. " on " .. model.Name)
     end
 end)
 
