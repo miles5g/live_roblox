@@ -283,9 +283,9 @@ Lighting.FogColor       = Color3.fromRGB(5, 0, 15)
 -- Bloom for the neon glow effect
 local bloom = Lighting:FindFirstChildOfClass("BloomEffect")
     or Instance.new("BloomEffect")
-bloom.Intensity   = 0.8
-bloom.Size        = 24
-bloom.Threshold   = 0.95
+bloom.Intensity   = 0.35  -- reduced: prevents blowout on bright avatars
+bloom.Size        = 14
+bloom.Threshold   = 0.98  -- higher = harder to trigger, less overexposure
 bloom.Name        = "NeonBloom"
 bloom.Parent      = Lighting
 
