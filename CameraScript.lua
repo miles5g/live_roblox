@@ -37,7 +37,16 @@ local FOCUS_HEIGHT     = 4     -- aim at chest/neck
 
 local TWEEN_DURATION   = 2.2   -- seconds per camera swing
 local FOLLOW_ALPHA     = 0.04  -- drift smoothness while locked
-local CYCLE_INTERVAL   = 5     -- seconds before moving to next character
+local MIN_INTERVAL     = 5     -- minimum seconds per character (full floor)
+local MAX_INTERVAL     = 20    -- maximum seconds per character (1 player)
+
+-- Dynamic interval: fewer players = more screen time each
+-- Formula: clamp(20 / playerCount, 5, 20)
+-- Examples: 1 player = 20s | 2 = 10s | 4 = 5s | 12 = 5s
+local function getCycleInterval()
+    local count = math.max(1, #activeParts)
+    return math.clamp(MAX_INTERVAL / count, MIN_INTERVAL, MAX_INTERVAL)
+end
 
 -- ── State ─────────────────────────────────────────────────
 
@@ -155,7 +164,7 @@ RunService.Heartbeat:Connect(function()
     cycleIndex = math.clamp(cycleIndex, 1, #activeParts)
 
     -- Time to move to next character?
-    if not isTweening and (tick() - lastCycleTime) >= CYCLE_INTERVAL then
+    if not isTweening and (tick() - lastCycleTime) >= getCycleInterval() then
         -- Count DOWN: newest → progressively older → oldest → wrap to newest
         cycleIndex = cycleIndex - 1
         if cycleIndex < 1 then
@@ -188,4 +197,4 @@ local STAGE_CENTER  = Vector3.new(0, 5, 7.5)
 local idleCamPos    = STAGE_CENTER + Vector3.new(4, 14, 28)
 camera.CFrame       = CFrame.lookAt(idleCamPos, STAGE_CENTER)
 
-print("[Camera] Ready — cycles every " .. CYCLE_INTERVAL .. "s | Portrait 9:16")
+print("[Camera] Ready — " .. MIN_INTERVAL .. "s-" .. MAX_INTERVAL .. "s dynamic cycle | Portrait 9:16")
