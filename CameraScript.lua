@@ -31,7 +31,7 @@ end)
 
 -- Close body shot — fills the frame with the character (head to knees)
 local CAM_DISTANCE     = 10    -- studs behind target
-local CAM_HEIGHT       = 3     -- slightly above waist height
+local CAM_HEIGHT       = 1     -- lowered: camera at waist level, looks slightly up (hero angle)
 local CAM_SIDE         = 2     -- slight 3/4 angle
 local FOCUS_HEIGHT     = 4     -- aim at chest/neck
 
@@ -61,10 +61,19 @@ local lastCycleTime = 0
 -- ── Helpers ───────────────────────────────────────────────
 
 local function getTargetCFrame(rootPart)
-    local pos   = rootPart.Position
-    local focus = pos + Vector3.new(0, FOCUS_HEIGHT, 0)
+    local pos    = rootPart.Position
+    local focus  = pos + Vector3.new(0, FOCUS_HEIGHT, 0)
     local camPos = pos + Vector3.new(CAM_SIDE, CAM_HEIGHT, CAM_DISTANCE)
-    return CFrame.lookAt(camPos, focus)
+
+    -- Build a perfectly level CFrame using explicit axes.
+    -- CFrame.lookAt can introduce roll when the camera is offset to the side.
+    -- This matrix method guarantees the horizon is always flat.
+    local forward  = (focus - camPos).Unit
+    local worldUp  = Vector3.new(0, 1, 0)
+    local right    = forward:Cross(worldUp).Unit
+    local up       = right:Cross(forward).Unit
+
+    return CFrame.fromMatrix(camPos, right, up, -forward)
 end
 
 local function tweenTo(rootPart)
