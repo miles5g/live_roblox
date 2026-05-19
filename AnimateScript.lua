@@ -45,8 +45,8 @@ animateEvent.OnClientEvent:Connect(function(model, animId)
             return animator:LoadAnimation(anim)
         end)
         if ok and track then
-            track.Looped = true
-            track:Play()
+        track.Looped = true
+        track:Play(0.1, 1, 0.5)  -- 0.5 = half speed
             return true
         end
         return false
@@ -54,7 +54,7 @@ animateEvent.OnClientEvent:Connect(function(model, animId)
 
     if not tryPlay(animId) then
         warn("[AnimateScript] " .. animId .. " failed on " .. model.Name .. " — falling back to Robot")
-        tryPlay("507771019")  -- Robot is always available
+        tryPlay("507771019")
     else
         print("[AnimateScript] Dancing: " .. animId .. " on " .. model.Name)
     end
