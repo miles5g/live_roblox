@@ -97,8 +97,13 @@ RunService.RenderStepped:Connect(function()
     camera.CFrame  = camera.CFrame:Lerp(desired, FOLLOW_ALPHA)
 end)
 
+-- ── Default idle position (before any viewer spawns) ──────
+-- Camera sits behind the grid looking at the stage center.
+-- Matches the same angle as the follow logic so the first
+-- tween looks seamless.
+local STAGE_CENTER = Vector3.new(0, 5, 7.5)  -- center of the 5×4 grid
+local idleCamPos   = STAGE_CENTER + Vector3.new(CAM_SIDE, CAM_HEIGHT, CAM_DISTANCE)
+camera.CFrame      = CFrame.lookAt(idleCamPos, STAGE_CENTER)
+
 -- ── Roblox Studio Setup Reminder (printed on Play) ────────
--- In Studio: set the game window to approximately 9:16 ratio
--- (e.g. 405 × 720 px) before streaming so what you see in
--- Studio matches what TikTok viewers see on mobile.
 print("[Camera] Portrait mode active — optimized for TikTok 9:16")
