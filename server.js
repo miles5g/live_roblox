@@ -5,7 +5,9 @@ const app = express();
 app.use(express.json());
 
 // --- Configuration ---
-const TIKTOK_USERNAME = 'milkywizard'; // Your TikTok handle (no @)
+const TIKTOK_USERNAME   = 'milkywizard'; // Your TikTok handle (no @)
+const TIKTOK_SESSION_ID = '';  // Add your TikTok sessionid cookie here (never commit this)
+const TIKTOK_TARGET_IDC = '';  // Add your tt-target-idc cookie here (e.g. useast5)
 const PORT = 3000;
 const MAX_ON_SCREEN = 12;  // Safe for Studio 60 FPS. Raise to 20 when streaming Roblox client.
 
@@ -69,7 +71,10 @@ const isAlreadyOnScreen = (username) => {
 };
 
 // --- TikTok Connection ---
-let tiktokConnection = new WebcastPushConnection(TIKTOK_USERNAME);
+const tiktokOptions = (TIKTOK_SESSION_ID && TIKTOK_TARGET_IDC)
+    ? { sessionId: TIKTOK_SESSION_ID, ttTargetIdc: TIKTOK_TARGET_IDC }
+    : {};
+let tiktokConnection = new WebcastPushConnection(TIKTOK_USERNAME, tiktokOptions);
 
 function connectToTikTok() {
     console.log(`[TikTok] Connecting to @${TIKTOK_USERNAME}...`);
@@ -88,6 +93,7 @@ function connectToTikTok() {
 
 // Chat message → scan for a Roblox username anywhere in the message
 tiktokConnection.on('chat', (data) => {
+    console.log(`[Chat] ${data.uniqueId}: "${data.comment}"`);
     const username = extractUsername(data.comment);
     if (!username) return;
 

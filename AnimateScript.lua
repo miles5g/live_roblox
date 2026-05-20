@@ -19,7 +19,7 @@ local DANCE_ANIMS = {
     "507771955",  -- Shufflin
 }
 
-local LOOPS_PER_ANIM = 2   -- how many loops before switching to next dance
+local LOOPS_PER_ANIM = 1   -- how many loops before switching to next dance
 
 local animateEvent = ReplicatedStorage:WaitForChild("AnimateCharacter", 30)
 
@@ -108,4 +108,4 @@ animateEvent.OnClientEvent:Connect(function(model, startAnimId)
     end)
 end)
 
-print("[AnimateScript] Ready — 2-loop cycling mode")
+print("[AnimateScript] Ready — 1-loop cycling mode")

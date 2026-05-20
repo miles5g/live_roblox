@@ -159,6 +159,9 @@ local function tweenTo(rootPart)
                     updateFades(rootPart)
                 end
             end)
+            -- Tell the server who the camera is on so it won't despawn them mid-shot.
+            local modelName = rootPart.Parent and rootPart.Parent.Name or ""
+            pcall(function() cameraFocusEvent:FireServer(modelName) end)
         end
         -- Signal SpawnScript: camera has fully landed, safe to load next character.
         pcall(function() cameraReadyEvent:FireServer() end)
@@ -210,7 +213,8 @@ end)
 -- Fired to the server each time the camera finishes tweening so SpawnScript
 -- knows it's safe to load the next character.
 
-local cameraReadyEvent = ReplicatedStorage:WaitForChild("CameraReady", 30)
+local cameraReadyEvent  = ReplicatedStorage:WaitForChild("CameraReady",  30)
+local cameraFocusEvent  = ReplicatedStorage:WaitForChild("CameraFocus",  30)
 
 -- ── Queue status ───────────────────────────────────────────
 -- SpawnScript fires this every poll so we know whether to hold the camera
@@ -296,6 +300,20 @@ task.spawn(function()
                 updateFades(currentTarget)
             end
             pcall(function() cameraReadyEvent:FireServer() end)
+            -- Immediately move to a random different character so the camera
+            -- doesn't appear frozen at one spot while waiting for the cycle timer.
+            if #activeParts > 1 and not queueHasItems then
+                local nextIndex = cycleIndex
+                repeat nextIndex = math.random(1, #activeParts)
+                until nextIndex ~= cycleIndex
+                cycleIndex = nextIndex
+                local target = activeParts[cycleIndex]
+                if target and target.Parent then
+                    tweenTo(target)
+                    lastCycleTime = tick()
+                    print("[Camera] Timeout-recover → " .. (target.Parent and target.Parent.Name or "?"))
+                end
+            end
         end
 
         if not isTweening and (tick() - lastCycleTime) >= CYCLE_INTERVAL then

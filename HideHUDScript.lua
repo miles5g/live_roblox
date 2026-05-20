@@ -2,6 +2,7 @@
 -- HideHUDScript  |  StarterPlayerScripts > LocalScript
 -- Removes every default Roblox HUD element so the TikTok
 -- stream shows a clean dance floor with no UI clutter.
+-- Also shows the "type your username" prompt at the top.
 -- ============================================================
 -- WHERE TO PUT THIS:
 --   Roblox Studio → Explorer → StarterPlayer → StarterPlayerScripts
@@ -45,6 +46,55 @@ local function hideTopbar()
         end
     end)
 end
+
+-- ── "Type your username" prompt ────────────────────────────
+-- Displayed at the top of the screen for TikTok viewers.
+
+local function createPrompt()
+    local Players     = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local playerGui   = LocalPlayer:WaitForChild("PlayerGui")
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name            = "SpawnPrompt"
+    screenGui.ResetOnSpawn    = false
+    screenGui.IgnoreGuiInset  = false  -- respect the topbar safe area
+    screenGui.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
+    screenGui.Parent          = playerGui
+
+    -- Semi-transparent dark pill behind the text
+    local bg = Instance.new("Frame")
+    bg.Name                = "Background"
+    bg.AnchorPoint         = Vector2.new(0.5, 0)
+    bg.Position            = UDim2.new(0.5, 0, 0, 8)
+    bg.Size                = UDim2.new(0.85, 0, 0, 46)
+    bg.BackgroundColor3    = Color3.fromRGB(0, 0, 0)
+    bg.BackgroundTransparency = 0.45
+    bg.BorderSizePixel     = 0
+    bg.Parent              = screenGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 26)
+    corner.Parent       = bg
+
+    local label = Instance.new("TextLabel")
+    label.Name                 = "PromptText"
+    label.AnchorPoint          = Vector2.new(0.5, 0.5)
+    label.Position             = UDim2.new(0.5, 0, 0.5, 0)
+    label.Size                 = UDim2.new(1, -20, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text                 = "💬  Type your username to spawn!"
+    label.TextColor3           = Color3.fromRGB(255, 255, 255)
+    label.TextStrokeColor3     = Color3.fromRGB(0, 0, 0)
+    label.TextStrokeTransparency = 0.4
+    label.Font                 = Enum.Font.GothamBold
+    label.TextSize             = 20
+    label.TextScaled           = true
+    label.TextXAlignment       = Enum.TextXAlignment.Center
+    label.Parent               = bg
+end
+
+createPrompt()
 
 hideCoreGui()
 hideTopbar()

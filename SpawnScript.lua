@@ -14,7 +14,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextService       = game:GetService("TextService")
 
 -- ── Config ────────────────────────────────────────────────
-local SERVER_URL      = "http://localhost:3000"
+local SERVER_URL      = "https://ricotta-mounted-extortion.ngrok-free.dev"
 local POLL_INTERVAL   = 1    -- seconds between queue checks
 local SPAWN_COOLDOWN  = 5    -- minimum seconds between spawns (each character gets 5s spotlight)
 local DANCE_DURATION  = 60   -- seconds before a character expires
@@ -24,7 +24,7 @@ local GRID_COLS       = 5    -- characters per row on the floor
 local GRID_SPACING    = 5    -- studs between characters
 
 -- No seed users — floor starts empty and fills via the queue.
-local SEED_USERS = {}
+local SEED_USERS = { "builderman", "Roblox" }
 
 -- R15 HumanoidRootPart sits ~3 studs above the character's feet.
 -- We add this so characters land ON the floor rather than through it.
@@ -68,6 +68,17 @@ queueStatusEvent.Parent = ReplicatedStorage
 local despawnEvent = Instance.new("RemoteEvent")
 despawnEvent.Name   = "DespawnCharacter"
 despawnEvent.Parent = ReplicatedStorage
+
+-- RemoteEvent: CameraScript fires this (client → server) whenever the
+-- camera lands on a new character, so the server knows who is on-screen.
+local cameraFocusEvent = Instance.new("RemoteEvent")
+cameraFocusEvent.Name   = "CameraFocus"
+cameraFocusEvent.Parent = ReplicatedStorage
+
+local cameraFocusName = ""  -- username the camera is currently showing
+cameraFocusEvent.OnServerEvent:Connect(function(_, username)
+    cameraFocusName = username or ""
+end)
 
 -- RemoteEvent: CameraScript fires this (client → server) once its tween
 -- has finished landing on a character. The poll loop waits for this signal
@@ -354,6 +365,13 @@ local function spawnCharacter(username)
         -- Always protect the most recent KEEP_RECENT characters
         if isProtected(model) then
             task.delay(15, tryExpire)
+            return
+        end
+
+        -- Never yank a character while the camera is actively showing them —
+        -- wait 5 more seconds and re-check so the viewer always has something to watch.
+        if cameraFocusName == username then
+            task.delay(5, tryExpire)
             return
         end
 
