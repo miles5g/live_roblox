@@ -22,35 +22,42 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextService       = game:GetService("TextService")
 local TweenService      = game:GetService("TweenService")
 
+-- ngrok free tier blocks GetAsync/PostAsync with an HTML page — RequestAsync + header fixes that.
+local HTTP_HEADERS = {
+    ["ngrok-skip-browser-warning"] = "true",
+    ["Content-Type"]               = "application/json",
+}
+
+local function httpGet(url)
+    return HttpService:RequestAsync({
+        Url = url, Method = "GET", Headers = HTTP_HEADERS,
+    })
+end
+
+local function httpPost(url, body)
+    return HttpService:RequestAsync({
+        Url = url, Method = "POST", Headers = HTTP_HEADERS, Body = body or "{}",
+    })
+end
+
+local function decodeJsonBody(response)
+    if not response or not response.Success or not response.Body then return nil end
+    local ok, data = pcall(HttpService.JSONDecode, HttpService, response.Body)
+    return ok and data or nil
+end
+
 -- ── Config ────────────────────────────────────────────────
 local SERVER_URL      = "https://ricotta-mounted-extortion.ngrok-free.dev"
 local POLL_INTERVAL   = 1    -- seconds between queue checks
-local SPAWN_COOLDOWN  = 5    -- minimum seconds between spawns (each character gets 5s spotlight)
+local SPAWN_COOLDOWN  = 3    -- seconds between queue spawns (VIP/regular FIFO from Node)
 local DANCE_DURATION  = 60   -- seconds before a character expires
 local KEEP_RECENT     = 5    -- always keep the most recent N characters alive
 local MAX_ON_SCREEN   = 20
 local GRID_COLS       = 5    -- characters per row on the floor
 local GRID_SPACING    = 5    -- studs between characters
 
-local SEED_USERS = {
-    "builderman", "Roblox", "Stickmasterluke", "Merely",
-    "Seranok", "Asimo3089", "Brighteyes", "Litozinnamon",
-    "DenisDaily", "Poke",
-}
-
--- Featured rotation: popular Roblox accounts cycled in every 60s
--- when real-viewer queue is empty and the floor has room.
--- Ordered roughly by follower count / fame.
-local FEATURED_ROTATION = {
-    "Roblox", "builderman", "Stickmasterluke", "Merely",
-    "Seranok", "Asimo3089", "Brighteyes", "Litozinnamon",
-    "DenisDaily", "Poke", "Tofuu", "Hyper", "Coeptus",
-    "BadccVoid", "CloneTrooper1019", "OrbitalOwen", "Nolan",
-    "Lilly_S", "Berezaa", "OFish", "Kikuxz", "Creeperslayer100",
-    "Rukiryo", "Defaultio", "Quenty", "ScriptOn", "Explode1",
-    "xSuperMarioFan", "Digiitaal", "Linkmon99",
-}
-local featuredIndex = 1
+-- Famous users are auto-queued by Node (famous_users.js) when TikTok chat is idle.
+-- Real viewers always spawn first; featured accounts fill gaps with no repeats per cycle.
 
 -- R15 HumanoidRootPart sits ~3 studs above the character's feet.
 -- We add this so characters land ON the floor rather than through it.
@@ -346,11 +353,13 @@ end
 
 local function notifyDone(username)
     pcall(function()
-        HttpService:PostAsync(
+        local response = httpPost(
             SERVER_URL .. "/api/queue/done",
-            HttpService:JSONEncode({ username = username }),
-            Enum.HttpContentType.ApplicationJson
+            HttpService:JSONEncode({ username = username })
         )
+        if not response or not response.Success then
+            warn("[Done] Failed to free slot for " .. username .. " on Node server")
+        end
     end)
 end
 
@@ -365,6 +374,32 @@ local lastSpawnTime = 0   -- tick() of the most recent spawn start
 local function reopenGate()
     cameraIsReady   = true
     cameraReadyTime = tick()
+end
+
+local function stabilizeDancer(model)
+    if not model or not model.Parent then return end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.WalkSpeed  = 0
+        hum.JumpHeight = 0
+        hum.AutoRotate = false
+        for _, state in ipairs({
+            Enum.HumanoidStateType.FallingDown,
+            Enum.HumanoidStateType.Ragdoll,
+            Enum.HumanoidStateType.Physics,
+        }) do
+            pcall(function() hum:SetStateEnabled(state, false) end)
+        end
+    end
+    for _, desc in ipairs(model:GetDescendants()) do
+        if desc:IsA("BasePart") then
+            if desc.Name == "HumanoidRootPart" then
+                desc.Anchored = true
+            else
+                desc.CanCollide = false
+            end
+        end
+    end
 end
 
 local function spawnCharacter(username)
@@ -473,9 +508,8 @@ local function spawnCharacter(username)
         )
         dropTween:Play()
         dropTween.Completed:Connect(function()
-            root.Anchored = false  -- re-enable physics after landing
-            -- Fire camera focus AFTER landing so the camera isn't
-            -- aimed at the sky while the character is mid-drop.
+            stabilizeDancer(model)
+            reopenGate()
             focusEvent:FireAllClients(model, slot.row)
         end)
     else
@@ -533,36 +567,33 @@ local function spawnCharacter(username)
     -- Hard failsafe: Debris removes after 10 min no matter what
     Debris:AddItem(model, 600)
 
-    -- 7. Schedule removal after DANCE_DURATION, but protect the most recent KEEP_RECENT
+    -- 7. Schedule removal after DANCE_DURATION
     local function tryExpire()
         if not model or not model.Parent then return end  -- already gone
 
-        -- Always protect the most recent KEEP_RECENT characters
-        if isProtected(model) then
-            task.delay(15, tryExpire)
-            return
-        end
-
-        -- Never yank a character while the camera is actively showing them —
-        -- wait 5 more seconds and re-check so the viewer always has something to watch.
-        if cameraFocusName == username then
-            task.delay(5, tryExpire)
-            return
-        end
-
-        -- If nobody is queued, keep everyone alive indefinitely
         local hasQueue = false
         pcall(function()
-            local raw  = HttpService:GetAsync(SERVER_URL .. "/api/status", true)
-            local data = HttpService:JSONDecode(raw)
-            hasQueue   = (data.regularQueueLength + data.vipQueueLength) > 0
+            local data = decodeJsonBody(httpGet(SERVER_URL .. "/api/status"))
+            if data then
+                hasQueue = (data.regularQueueLength + data.vipQueueLength + (data.famousQueueLength or 0)) > 0
+            end
         end)
 
+        -- Protect recent spawns only when nobody is waiting — otherwise the floor stalls.
+        if isProtected(model) and not hasQueue then
+            task.delay(15, tryExpire)
+            return
+        end
+
+        -- Brief grace while camera is on them; don't block forever if queue has waiters.
+        if cameraFocusName == username then
+            task.delay(hasQueue and 5 or 15, tryExpire)
+            return
+        end
+
         if not hasQueue then
-            -- Empty queue — keep this character, check again in 15s
             task.delay(15, tryExpire)
         else
-            -- People are waiting — free up the slot
             hardDestroy(model, slot)
             notifyDone(username)
             print("[Done] " .. username .. " expired — making room for queue.")
@@ -593,52 +624,38 @@ for _, obj in ipairs(workspace:GetChildren()) do
 end
 print("[Server] Cleared leftover character models from workspace.")
 
-print("[Server] SpawnScript starting — sending reset signal...")
-pcall(function()
-    HttpService:PostAsync(
-        SERVER_URL .. "/api/reset",
-        "{}",
-        Enum.HttpContentType.ApplicationJson
-    )
+local function sendNodeReset()
+    local ok, response = pcall(function()
+        return httpPost(SERVER_URL .. "/api/reset", "{}")
+    end)
+    if ok and response and response.Success then
+        print("[Server] Node reset OK — queue state cleared")
+        return true
+    end
+    warn("[Server] Node reset failed — is node server.js + ngrok running?")
+    return false
+end
+
+-- Re-sync Node when the host rejoins after an idle disconnect (game server restarts).
+Players.PlayerAdded:Connect(function(player)
+    task.defer(function()
+        if #Players:GetPlayers() <= 1 then
+            sendNodeReset()
+            lastSpawnTime = 0
+            cameraIsReady = true
+            cameraReadyTime = tick()
+            print("[Server] Player rejoined — re-synced Node queue (" .. player.Name .. ")")
+        end
+    end)
 end)
+
+print("[Server] SpawnScript starting — sending reset signal...")
+sendNodeReset()
 print("[Server] Reset sent. Starting poll loop.")
 
 -- ── Seed Players ──────────────────────────────────────────
 -- Spawn 2 placeholder characters immediately so the floor isn't empty at stream start.
 -- Stagger them by 3s so they don't all hit the Roblox API at once.
-for i, seedName in ipairs(SEED_USERS) do
-    task.delay((i - 1) * 3, function()
-        print("[Seed] Auto-spawning " .. seedName)
-        spawnCharacter(seedName)
-    end)
-end
-
--- ── Featured Rotation Loop ─────────────────────────────────
--- Every 60s, if the viewer queue is empty and the floor has open slots,
--- inject the next featured account so the floor stays populated.
-task.spawn(function()
-    task.wait(90)  -- give seeds time to load first
-    while true do
-        task.wait(60)
-        local ok, raw = pcall(function()
-            return HttpService:GetAsync(SERVER_URL .. "/api/status", true)
-        end)
-        if ok and raw then
-            local parsed, data = pcall(HttpService.JSONDecode, HttpService, raw)
-            if parsed and data then
-                local queueEmpty  = (data.regularQueueLength + data.vipQueueLength) == 0
-                local hasRoom     = data.activeCount < MAX_ON_SCREEN
-                if queueEmpty and hasRoom then
-                    local name = FEATURED_ROTATION[featuredIndex]
-                    featuredIndex = (featuredIndex % #FEATURED_ROTATION) + 1
-                    print("[Featured] Cycling in " .. name)
-                    task.spawn(spawnCharacter, name)
-                end
-            end
-        end
-    end
-end)
-
 -- ── Main Poll Loop ─────────────────────────────────────────
 
 print("[Server] SpawnScript running — polling " .. SERVER_URL)
@@ -646,42 +663,33 @@ print("[Server] SpawnScript running — polling " .. SERVER_URL)
 while true do
     task.wait(POLL_INTERVAL)
 
-    -- Wait until the camera has finished tweening to the current character
-    -- before loading the next one. CameraScript fires CameraReady when its
-    -- tween.Completed fires, so this gate is event-driven, not timer-based.
-    -- Safety: auto-open after 10s in case the signal is ever missed.
-    local gateTimedOut = (tick() - cameraReadyTime) > 6
-    if not cameraIsReady and not gateTimedOut then continue end
-    if gateTimedOut and not cameraIsReady then
-        warn("[Gate] CameraReady timeout — auto-opening gate")
-        cameraIsReady = true
-    end
+    -- Pace queue spawns with cooldown — do NOT wait for camera (that was blocking the queue).
+    if (tick() - lastSpawnTime) < SPAWN_COOLDOWN then continue end
 
     local ok, raw = pcall(function()
-        return HttpService:GetAsync(SERVER_URL .. "/api/queue/next", true)
+        local response = httpGet(SERVER_URL .. "/api/queue/next")
+        return response and response.Success and response.Body or nil
     end)
 
     if not ok or not raw then
         warn("[Poll] Cannot reach Node.js server. Is `node server.js` running?")
     else
         local parseOk, data = pcall(HttpService.JSONDecode, HttpService, raw)
-        if parseOk and data then
-            -- Tell clients whether the queue is occupied so the camera
-            -- knows not to cycle backwards while a new spawn is incoming.
+        if not parseOk or not data then
+            warn("[Poll] Bad response from server (not JSON). Check SERVER_URL / ngrok.")
+        elseif parseOk and data then
             local hasQueue = (data.status == "spawn" or data.status == "bump")
             queueStatusEvent:FireAllClients(hasQueue)
 
             if data.status == "spawn" and data.username then
                 print("[Poll] Spawning " .. data.username .. " [" .. (data.type or "Regular") .. "]")
-                cameraIsReady   = false   -- close gate until camera locks on
-                cameraReadyTime = tick()  -- start timeout clock
+                lastSpawnTime = tick()
                 task.spawn(spawnCharacter, data.username)
 
             elseif data.status == "bump" and data.evict and data.username then
-                -- Evict the oldest character to make room, then spawn the new one
-                print("[Bump] Evicting " .. data.evict .. " → Spawning " .. data.username)
-                cameraIsReady   = false
-                cameraReadyTime = tick()
+                print("[Bump] Evicting " .. data.evict .. " → Spawning " .. data.username
+                    .. " [" .. (data.type or "Regular") .. "]")
+                lastSpawnTime = tick()
                 local evictModel = workspace:FindFirstChild(data.evict)
                 if evictModel then
                     local hum = evictModel:FindFirstChildOfClass("Humanoid")

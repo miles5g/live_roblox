@@ -1,4 +1,6 @@
 node_modules/
+.anti_idle.pid
+anti_idle.log
 .env
 *.log
 # .rbxl files ARE tracked — Roblox place file is part of the project
