@@ -16,11 +16,28 @@ const http = require('http');
 // Add any valid Roblox usernames here.
 // "Roblox" and "builderman" are official Roblox accounts
 // that always exist, so they're safe for testing.
+// 20 valid Roblox usernames — injected one every 10 seconds
 const TEST_USERS = [
-    'Roblox',
     'builderman',
-    'milkywizard',
-    'mcjbomb',
+    'Stickmasterluke',
+    'Seranok',
+    'Merely',
+    'Nolan',
+    'Brighteyes',
+    'Asimo3089',
+    'BadccVoid',
+    'Litozinnamon',
+    'OrbitalOwen',
+    'Coeptus',
+    'Berezaa',
+    'CloneTrooper1019',
+    'DrTrayblox',
+    'OFish',
+    'Lilly_S',
+    'Tofuu',
+    'DenisDaily',
+    'Poke',
+    'Hyper',
 ];
 
 // ── Helper: POST a username into the queue ─────────────────
@@ -91,12 +108,14 @@ async function runTests() {
 
     await checkStatus();
 
-    console.log(`[Test] Injecting ${TEST_USERS.length} test usernames...\n`);
+    console.log(`[Test] Injecting ${TEST_USERS.length} usernames — one every 10 seconds...\n`);
 
-    for (const user of TEST_USERS) {
-        await injectUser(user);
-        // 10 second gap between each spawn so you can watch each one land
-        await new Promise(r => setTimeout(r, 10000));
+    for (let i = 0; i < TEST_USERS.length; i++) {
+        await injectUser(TEST_USERS[i]);
+        if (i < TEST_USERS.length - 1) {
+            console.log(`[Test] Waiting 10s before next inject...`);
+            await new Promise(r => setTimeout(r, 10000));
+        }
     }
 
     console.log('\n[Test] All users injected. Checking status...');

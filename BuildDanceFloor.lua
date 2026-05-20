@@ -14,6 +14,10 @@ local Workspace = game:GetService("Workspace")
 -- ── Tear down any existing build ──────────────────────────
 local old = Workspace:FindFirstChild("DanceFloor")
 if old then old:Destroy() end
+-- Also remove any leftover SpawnLocation anchors from previous runs
+for _, obj in ipairs(Workspace:GetChildren()) do
+    if obj.Name == "SpawnLocation" then obj:Destroy() end
+end
 local oldAtmo = Workspace.Terrain:FindFirstChildOfClass("Atmosphere")
 if oldAtmo then oldAtmo:Destroy() end
 
@@ -83,21 +87,23 @@ local function pointlight(parent, color, brightness, range)
 end
 
 -- ── 1. Floor slab ─────────────────────────────────────────
+-- Grid is exactly 25 wide (X: -12.5 to +12.5) × 20 deep (Z: -2.5 to +17.5)
 local floor = part(
-    Vector3.new(32, 2, 28),
+    Vector3.new(25, 2, 20),
     Vector3.new(FX, FLOOR_TOP - 1, FZ),
     C_FLOOR
 )
 floor.Name = "FloorSlab"
 
 -- ── 2. Neon perimeter border ──────────────────────────────
+-- Border sits exactly on the outer edge of the grid lines
 local B = 0.25  -- border thickness
--- Front / back
-neon(Vector3.new(32, B, B), Vector3.new(FX, FLOOR_TOP, FZ + 14), C_CYAN)
-neon(Vector3.new(32, B, B), Vector3.new(FX, FLOOR_TOP, FZ - 14), C_CYAN)
--- Left / right
-neon(Vector3.new(B, B, 28), Vector3.new(FX - 16, FLOOR_TOP, FZ), C_CYAN)
-neon(Vector3.new(B, B, 28), Vector3.new(FX + 16, FLOOR_TOP, FZ), C_CYAN)
+-- Front (Z = +17.5) / Back (Z = -2.5)
+neon(Vector3.new(25, B, B), Vector3.new(FX, FLOOR_TOP, 17.5), C_CYAN)
+neon(Vector3.new(25, B, B), Vector3.new(FX, FLOOR_TOP, -2.5), C_CYAN)
+-- Left (X = -12.5) / Right (X = +12.5)
+neon(Vector3.new(B, B, 20), Vector3.new(-12.5, FLOOR_TOP, FZ), C_CYAN)
+neon(Vector3.new(B, B, 20), Vector3.new( 12.5, FLOOR_TOP, FZ), C_CYAN)
 
 -- ── 3. Dance grid tiles (5 col × 4 row) ───────────────────
 local TILE = 4.7   -- tile size (slightly < 5 to leave gap for grid lines)
@@ -130,31 +136,28 @@ for row = 0, 4 do
 end
 
 -- ── 5. SpawnLocation anchor ───────────────────────────────
--- Named exactly "SpawnLocation" — SpawnScript looks for this.
--- Placed at the back of the grid (row 0).
--- Y = FLOOR_TOP + 0.1 → spawn math puts HumanoidRootPart at Y≈5 (on the floor).
-local spawnLoc = part(
-    Vector3.new(4, 0.2, 4),
-    Vector3.new(0, FLOOR_TOP + 0.1, 0),
-    C_CYAN, Enum.Material.Neon, 0.75, false
-)
-spawnLoc.Name = "SpawnLocation"
--- Subtle pulse indicator so you can find it in Studio
-local si = Instance.new("SelectionBox")
-si.Adornee = spawnLoc
-si.Color3   = C_CYAN
-si.LineThickness = 0.04
-si.Parent   = spawnLoc
+-- Named exactly "SpawnLocation" — SpawnScript looks for workspace:WaitForChild("SpawnLocation").
+-- Parented directly to Workspace (NOT inside the folder) so SpawnScript can find it.
+-- Fully invisible — just a positional anchor, nothing visible on the floor.
+local spawnLoc = Instance.new("Part")
+spawnLoc.Name         = "SpawnLocation"
+spawnLoc.Size         = Vector3.new(4, 0.2, 4)
+spawnLoc.Position     = Vector3.new(0, FLOOR_TOP + 0.1, 0)
+spawnLoc.Transparency = 1      -- completely hidden
+spawnLoc.CanCollide   = false
+spawnLoc.Anchored     = true
+spawnLoc.CastShadow   = false
+spawnLoc.Parent       = Workspace  -- direct child of Workspace for SpawnScript to find
 
 -- ── 6. Corner light poles ─────────────────────────────────
 local POLE_H = 22
 local POLE_Y = FLOOR_TOP + POLE_H / 2
 
 local poles = {
-    { pos = Vector3.new(-15, POLE_Y, -5), pColor = C_CYAN,   lColor = C_WHITE },
-    { pos = Vector3.new( 15, POLE_Y, -5), pColor = C_PINK,   lColor = Color3.fromRGB(255, 200, 255) },
-    { pos = Vector3.new(-15, POLE_Y, 20), pColor = C_PURPLE, lColor = Color3.fromRGB(200, 200, 255) },
-    { pos = Vector3.new( 15, POLE_Y, 20), pColor = C_CYAN,   lColor = C_WHITE },
+    { pos = Vector3.new(-12.5, POLE_Y, -2.5), pColor = C_CYAN,   lColor = C_WHITE },
+    { pos = Vector3.new( 12.5, POLE_Y, -2.5), pColor = C_PINK,   lColor = Color3.fromRGB(255, 200, 255) },
+    { pos = Vector3.new(-12.5, POLE_Y, 17.5), pColor = C_PURPLE, lColor = Color3.fromRGB(200, 200, 255) },
+    { pos = Vector3.new( 12.5, POLE_Y, 17.5), pColor = C_CYAN,   lColor = C_WHITE },
 }
 
 for i, pd in ipairs(poles) do
@@ -168,13 +171,13 @@ for i, pd in ipairs(poles) do
         pd.pColor
     )
     cap.Name = "PoleHead_" .. i
-    spotlight(cap, pd.lColor, 5, 65, 45)
+    spotlight(cap, pd.lColor, 6, 80, 70)
 end
 
 -- ── 7. Overhead truss lighting rig ────────────────────────
 local trussY = FLOOR_TOP + 20
 local truss = part(
-    Vector3.new(24, 0.5, 0.5),
+    Vector3.new(25, 0.5, 0.5),
     Vector3.new(FX, trussY, FZ),
     C_METAL, Enum.Material.Metal
 )
@@ -194,20 +197,20 @@ for _, th in ipairs(trussHeads) do
         th.color
     )
     head.Name = "TrussHead"
-    spotlight(head, th.color, 4, 55, 38)
+    spotlight(head, th.color, 5, 70, 60)
 end
 
 -- Support wires from truss to poles (thin dark rods)
 local wireData = {
-    { x = -15, pz = -5  },
-    { x =  15, pz = -5  },
-    { x = -15, pz = 20  },
-    { x =  15, pz = 20  },
+    { x = -12.5, pz = -2.5 },
+    { x =  12.5, pz = -2.5 },
+    { x = -12.5, pz = 17.5 },
+    { x =  12.5, pz = 17.5 },
 }
 for _, wd in ipairs(wireData) do
     local wireStart = Vector3.new(wd.x, FLOOR_TOP + POLE_H, wd.pz)
     local wireEnd   = Vector3.new(
-        (wd.x < 0) and -12 or 12,
+        (wd.x < 0) and -10 or 10,
         trussY,
         FZ
     )
@@ -241,11 +244,29 @@ end
 -- A dark rear wall behind the grid so the stream never shows
 -- the Roblox skybox through the back of the stage.
 local wall = part(
-    Vector3.new(32, 26, 1),
+    Vector3.new(25, 26, 1),
     Vector3.new(FX, FLOOR_TOP + 12, -6),
     C_FLOOR
 )
 wall.Name = "BackdropWall"
+
+-- SurfaceGui + ImageLabel is more reliable than Decal for custom assets in Play mode
+local gui = Instance.new("SurfaceGui")
+gui.Face          = Enum.NormalId.Back   -- faces toward the dance floor & camera
+gui.SizingMode    = Enum.SurfaceGuiSizingMode.PixelsPerStud
+gui.PixelsPerStud = 50
+gui.AlwaysOnTop   = false
+gui.Parent        = wall
+
+local img = Instance.new("ImageLabel")
+img.Image                  = "rbxassetid://77194738029446"
+img.Size                   = UDim2.new(1, 0, 1, 0)
+img.Position               = UDim2.new(0, 0, 0, 0)
+img.BackgroundTransparency = 1
+img.ImageTransparency      = 0.2
+img.ScaleType              = Enum.ScaleType.Stretch
+img.Parent                 = gui
+print("Backdrop SurfaceGui applied — ID 77194738029446")
 
 -- Neon "JOIN THE FLOOR" sign strips on the wall
 local signStrips = {
@@ -283,9 +304,9 @@ Lighting.FogColor       = Color3.fromRGB(5, 0, 15)
 -- Bloom for the neon glow effect
 local bloom = Lighting:FindFirstChildOfClass("BloomEffect")
     or Instance.new("BloomEffect")
-bloom.Intensity   = 0.35  -- reduced: prevents blowout on bright avatars
-bloom.Size        = 14
-bloom.Threshold   = 0.98  -- higher = harder to trigger, less overexposure
+bloom.Intensity   = 0.08  -- very subtle glow, no blowout
+bloom.Size        = 10
+bloom.Threshold   = 0.99  -- only the brightest neon triggers it
 bloom.Name        = "NeonBloom"
 bloom.Parent      = Lighting
 

@@ -33,6 +33,33 @@ const isValidRobloxUsername = (username) => {
     return regex.test(username);
 };
 
+// Common words to skip when scanning chat for usernames
+const IGNORE_WORDS = new Set([
+    'the','and','for','you','are','not','but','can','all','was','has',
+    'had','his','her','its','our','out','one','get','got','new','now',
+    'how','who','why','did','try','roblox','game','play','name','user',
+    'floor','dance','hello','please','spawn','add','put','yes','lol',
+    'omg','haha','wait','hey','bro','sis','nah','yep','nope','this',
+    'that','with','from','they','them','just','like','want','mine',
+    'here','come','lets','lmao','nice','cool','good','love','whoa',
+]);
+
+// Scan a chat message for the first word that looks like a Roblox username.
+// Strips leading @ symbol. Case-insensitive matching via normalization.
+const extractUsername = (message) => {
+    const words = message.trim().split(/\s+/);
+    for (const word of words) {
+        const cleaned = word.replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '');
+        if (
+            isValidRobloxUsername(cleaned) &&
+            !IGNORE_WORDS.has(cleaned.toLowerCase())
+        ) {
+            return cleaned;  // return as-typed (Roblox API is case-insensitive)
+        }
+    }
+    return null;
+};
+
 // Only block if the user is currently visible on the dance floor.
 // Queue duplicates are allowed — same person can queue multiple times
 // and will get another turn once their current spawn finishes.
@@ -59,13 +86,14 @@ function connectToTikTok() {
 
 // --- TikTok Event Listeners ---
 
-// Chat message → try to add as regular queue entry
+// Chat message → scan for a Roblox username anywhere in the message
 tiktokConnection.on('chat', (data) => {
-    const text = data.comment.trim();
+    const username = extractUsername(data.comment);
+    if (!username) return;
 
-    if (isValidRobloxUsername(text) && !isAlreadyOnScreen(text)) {
-        regularQueue.push(text);
-        console.log(`[Queue] +${text} (queue: ${regularQueue.length})`);
+    if (!isAlreadyOnScreen(username)) {
+        regularQueue.push(username);
+        console.log(`[Queue] +${username} from "${data.comment.trim()}" (queue: ${regularQueue.length})`);
     }
 });
 
