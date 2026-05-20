@@ -12,6 +12,7 @@ local Players           = game:GetService("Players")
 local Debris            = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextService       = game:GetService("TextService")
+local TweenService      = game:GetService("TweenService")
 
 -- ── Config ────────────────────────────────────────────────
 local SERVER_URL      = "https://ricotta-mounted-extortion.ngrok-free.dev"
@@ -23,8 +24,25 @@ local MAX_ON_SCREEN   = 20
 local GRID_COLS       = 5    -- characters per row on the floor
 local GRID_SPACING    = 5    -- studs between characters
 
--- No seed users — floor starts empty and fills via the queue.
-local SEED_USERS = { "builderman", "Roblox" }
+local SEED_USERS = {
+    "builderman", "Roblox", "Stickmasterluke", "Merely",
+    "Seranok", "Asimo3089", "Brighteyes", "Litozinnamon",
+    "DenisDaily", "Poke",
+}
+
+-- Featured rotation: popular Roblox accounts cycled in every 60s
+-- when real-viewer queue is empty and the floor has room.
+-- Ordered roughly by follower count / fame.
+local FEATURED_ROTATION = {
+    "Roblox", "builderman", "Stickmasterluke", "Merely",
+    "Seranok", "Asimo3089", "Brighteyes", "Litozinnamon",
+    "DenisDaily", "Poke", "Tofuu", "Hyper", "Coeptus",
+    "BadccVoid", "CloneTrooper1019", "OrbitalOwen", "Nolan",
+    "Lilly_S", "Berezaa", "OFish", "Kikuxz", "Creeperslayer100",
+    "Rukiryo", "Defaultio", "Quenty", "ScriptOn", "Explode1",
+    "xSuperMarioFan", "Digiitaal", "Linkmon99",
+}
+local featuredIndex = 1
 
 -- R15 HumanoidRootPart sits ~3 studs above the character's feet.
 -- We add this so characters land ON the floor rather than through it.
@@ -108,22 +126,51 @@ local spawnAnchor = workspace:WaitForChild("SpawnLocation")
 --   Row 3 (front): col 4 → 0  (right to left)
 -- New spawns always continue from where the pointer left off.
 local function buildSpawnSlots()
-    local slots = {}
     local GRID_ROWS = math.floor(MAX_ON_SCREEN / GRID_COLS)
+
+    -- Build a flat grid of all positions, tagged with (row, col)
+    local grid = {}
     for row = 0, GRID_ROWS - 1 do
-        local leftToRight = (row % 2 == 0)
-        for step = 0, GRID_COLS - 1 do
-            local col = leftToRight and step or (GRID_COLS - 1 - step)
-            local offset = Vector3.new(
-                (col - math.floor(GRID_COLS / 2)) * GRID_SPACING,
-                spawnAnchor.Size.Y / 2 + CHAR_ROOT_HEIGHT,
-                row * GRID_SPACING
-            )
-            table.insert(slots, {
-                position = spawnAnchor.Position + offset,
-                occupied = false,
-            })
+        for col = 0, GRID_COLS - 1 do
+            table.insert(grid, { row = row, col = col })
         end
+    end
+
+    -- Checkerboard-first ordering:
+    --   Pass 1 → cells where (row+col) is EVEN  (spread across whole floor)
+    --   Pass 2 → cells where (row+col) is ODD   (fill the gaps)
+    -- Within each pass, preserve the S-route direction per row.
+    local function buildPass(parity)
+        local pass = {}
+        for row = 0, GRID_ROWS - 1 do
+            local leftToRight = (row % 2 == 0)
+            for step = 0, GRID_COLS - 1 do
+                local col = leftToRight and step or (GRID_COLS - 1 - step)
+                if (row + col) % 2 == parity then
+                    table.insert(pass, { row = row, col = col })
+                end
+            end
+        end
+        return pass
+    end
+
+    local ordered = {}
+    for _, cell in ipairs(buildPass(0)) do table.insert(ordered, cell) end
+    for _, cell in ipairs(buildPass(1)) do table.insert(ordered, cell) end
+
+    -- Convert to slot objects (store row so client can do row-based fading)
+    local slots = {}
+    for _, cell in ipairs(ordered) do
+        local offset = Vector3.new(
+            (cell.col - math.floor(GRID_COLS / 2)) * GRID_SPACING,
+            spawnAnchor.Size.Y / 2 + CHAR_ROOT_HEIGHT,
+            cell.row * GRID_SPACING
+        )
+        table.insert(slots, {
+            position = spawnAnchor.Position + offset,
+            occupied = false,
+            row      = cell.row,   -- 0 = back, higher = closer to camera
+        })
     end
     return slots
 end
@@ -294,14 +341,39 @@ local function spawnCharacter(username)
     -- Character is committed to the floor — release the spawn lock
     spawningNow[username] = nil
     model.Name = username
+    model:SetAttribute("SpawnRow", slot.row)  -- used by CameraScript for row-based fading
     -- Ensure PrimaryPart is set (CreateHumanoidModelFromDescription should do this,
     -- but we guard against edge cases)
     if not model.PrimaryPart then
         model.PrimaryPart = model:FindFirstChild("HumanoidRootPart")
     end
+    -- Start 40 studs above the floor, then tween down with a bounce
+    -- so the character visibly drops from the sky onto their tile.
+    local finalCFrame = CFrame.new(slot.position) * CFrame.Angles(0, math.pi, 0)
+    local dropCFrame  = CFrame.new(slot.position + Vector3.new(0, 40, 0)) * CFrame.Angles(0, math.pi, 0)
+    model:SetPrimaryPartCFrame(dropCFrame)
     model.Parent = workspace
-    -- Rotate 180° so characters face the camera (positive Z direction)
-    model:SetPrimaryPartCFrame(CFrame.new(slot.position) * CFrame.Angles(0, math.pi, 0))
+
+    -- Anchor root during drop so physics doesn't fight the tween
+    local root = model:FindFirstChild("HumanoidRootPart")
+    if root then
+        root.Anchored = true
+        local dropTween = TweenService:Create(
+            root,
+            TweenInfo.new(0.85, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out),
+            { CFrame = finalCFrame }
+        )
+        dropTween:Play()
+        dropTween.Completed:Connect(function()
+            root.Anchored = false  -- re-enable physics after landing
+            -- Fire camera focus AFTER landing so the camera isn't
+            -- aimed at the sky while the character is mid-drop.
+            focusEvent:FireAllClients(model)
+        end)
+    else
+        -- No root found — fire focus immediately as fallback
+        focusEvent:FireAllClients(model)
+    end
 
     -- Spawn effects are triggered by CameraScript AFTER the camera tween
     -- arrives at this character, so the effects play while the camera is
@@ -346,11 +418,6 @@ local function spawnCharacter(username)
     -- 5. Tell clients to play a dance animation on this model (client-side loading)
 	local animId = getNextAnimId()
     animateEvent:FireAllClients(model, animId)
-
-    -- 6. Tell the camera to swing to this character.
-    -- Pass the MODEL (not PrimaryPart) — PrimaryPart can be nil immediately after spawn.
-    -- CameraScript will find HumanoidRootPart itself.
-    focusEvent:FireAllClients(model)
 
     -- Register in spawn order for protection logic
     table.insert(recentModels, model)
@@ -437,6 +504,32 @@ for i, seedName in ipairs(SEED_USERS) do
         spawnCharacter(seedName)
     end)
 end
+
+-- ── Featured Rotation Loop ─────────────────────────────────
+-- Every 60s, if the viewer queue is empty and the floor has open slots,
+-- inject the next featured account so the floor stays populated.
+task.spawn(function()
+    task.wait(90)  -- give seeds time to load first
+    while true do
+        task.wait(60)
+        local ok, raw = pcall(function()
+            return HttpService:GetAsync(SERVER_URL .. "/api/status", true)
+        end)
+        if ok and raw then
+            local parsed, data = pcall(HttpService.JSONDecode, HttpService, raw)
+            if parsed and data then
+                local queueEmpty  = (data.regularQueueLength + data.vipQueueLength) == 0
+                local hasRoom     = data.activeCount < MAX_ON_SCREEN
+                if queueEmpty and hasRoom then
+                    local name = FEATURED_ROTATION[featuredIndex]
+                    featuredIndex = (featuredIndex % #FEATURED_ROTATION) + 1
+                    print("[Featured] Cycling in " .. name)
+                    task.spawn(spawnCharacter, name)
+                end
+            end
+        end
+    end
+end)
 
 -- ── Main Poll Loop ─────────────────────────────────────────
 

@@ -6,8 +6,8 @@ app.use(express.json());
 
 // --- Configuration ---
 const TIKTOK_USERNAME   = 'milkywizard'; // Your TikTok handle (no @)
-const TIKTOK_SESSION_ID = '';  // Add your TikTok sessionid cookie here (never commit this)
-const TIKTOK_TARGET_IDC = '';  // Add your tt-target-idc cookie here (e.g. useast5)
+const TIKTOK_SESSION_ID = 'eb7d91ce9fdcfe3e1d22804cd05fc1dc';
+const TIKTOK_TARGET_IDC = 'useast5';
 const PORT = 3000;
 const MAX_ON_SCREEN = 12;  // Safe for Studio 60 FPS. Raise to 20 when streaming Roblox client.
 

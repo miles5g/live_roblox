@@ -92,16 +92,20 @@ end)
 
 local function updateFades(focusRoot)
     if not focusRoot or not focusRoot.Parent then return end
-    local focusZ = focusRoot.Position.Z
+    local focusModel = focusRoot.Parent
+    local focusRow   = focusModel and focusModel:GetAttribute("SpawnRow")
+
     for _, root in ipairs(activeParts) do
         if root and root.Parent then
-            local model = root.Parent
+            local model    = root.Parent
+            local modelRow = model:GetAttribute("SpawnRow")
+
             if root == focusRoot then
-                setModelFade(model, 0)           -- focused: fully visible
-            elseif root.Position.Z > focusZ + 2.5 then
-                setModelFade(model, FADE_ALPHA)  -- clearly closer row: fade out
+                setModelFade(model, 0)                    -- focused char: always visible
+            elseif focusRow and modelRow and modelRow < focusRow then
+                setModelFade(model, FADE_ALPHA)           -- closer to camera than focus: fade
             else
-                setModelFade(model, 0)           -- behind focus: fully visible
+                setModelFade(model, 0)                    -- same row or behind: visible
             end
         end
     end
@@ -133,10 +137,10 @@ local function tweenTo(rootPart)
     isTweening     = true
     tweenStartTime = tick()
 
-    -- Apply fades immediately based on the new target's row.
-    -- Front-row characters go transparent AS the pan starts so they
-    -- are never blocking the view when the camera arrives.
-    updateFades(rootPart)
+    -- Clear all fades while panning so nothing disappears mid-swing.
+    -- updateFades() fires on tween.Completed to fade front-row chars
+    -- only once the camera has fully settled on the target.
+    clearAllFades()
 
     local tween = TweenService:Create(
         camera,
@@ -269,6 +273,19 @@ focusEvent.OnClientEvent:Connect(function(model)
     tweenTo(rootPart)
     lastCycleTime = tick()
     print("[Camera] → " .. model.Name .. " (" .. #activeParts .. " on floor)")
+end)
+
+-- ── Fade keeper ────────────────────────────────────────────
+-- Re-applies correct fades every second whenever the camera is
+-- settled (not tweening). Catches any missed tween.Completed
+-- callbacks and fixes fades after cycle transitions.
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if not isTweening and currentTarget and currentTarget.Parent then
+            updateFades(currentTarget)
+        end
+    end
 end)
 
 -- ── Cycle loop ─────────────────────────────────────────────
